@@ -156,11 +156,12 @@
     });
     $('chapterEmpty').hidden = visible > 0;
   };
-  const audioExport = { recorder:null, source:null, chunks:[], chapter:null };
+  const audioExport = { recorder:null, source:null, chunks:[], chapter:null, batch:null };
   const finishAudioExport = save => {
     const recorder = audioExport.recorder;
     if (!recorder) return;
     const complete = () => {
+      const batch = audioExport.batch;
       if (save && audioExport.chunks.length) {
         const blob = new Blob(audioExport.chunks, { type: recorder.mimeType || 'audio/webm' });
         const url = URL.createObjectURL(blob);
@@ -170,28 +171,56 @@
         setTimeout(() => URL.revokeObjectURL(url), 1000);
         status(`Đã lưu audio: ${link.download}`);
       }
-      audioExport.source?.getTracks().forEach(track => track.stop());
-      audioExport.recorder = null; audioExport.source = null; audioExport.chunks = []; audioExport.chapter = null;
+      if (!batch) audioExport.source?.getTracks().forEach(track => track.stop());
+      audioExport.recorder = null; if (!batch) audioExport.source = null; audioExport.chunks = []; audioExport.chapter = null;
       const button = $('exportAudioButton'); if (button) button.textContent = 'Xuất audio chương này';
+      if (!batch) { const allButton = $('exportAllAudioButton'); if (allButton) allButton.textContent = 'Xuất tất cả audio'; }
+      if (batch?.next) setTimeout(batch.next, 450);
     };
     recorder.onstop = complete;
     if (recorder.state === 'inactive') complete(); else recorder.stop();
   };
+  const recordAudioChapter = (source, index, batch = null) => {
+    select(index, true);
+    const stream = new MediaStream(source.getAudioTracks());
+    const mimeType = ['audio/webm;codecs=opus', 'audio/webm'].find(type => MediaRecorder.isTypeSupported(type));
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    audioExport.recorder = recorder; audioExport.source = source; audioExport.chunks = []; audioExport.chapter = chapters[index]; audioExport.batch = batch;
+    recorder.ondataavailable = event => { if (event.data.size) audioExport.chunks.push(event.data); };
+    recorder.start(250);
+    $('exportAudioButton').textContent = batch ? `Đang xuất ${index + 1}/${chapters.length}` : 'Dừng thu audio';
+    state.voice = findVoice(); state.paragraph = 0; state.chunkParagraph = -1; speakParagraph();
+  };
   const startAudioExport = async () => {
-    if (audioExport.recorder) { finishAudioExport(false); stop(); return; }
+    if (audioExport.recorder) { audioExport.batch = null; finishAudioExport(false); return; }
     if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') { status('Trình duyệt không hỗ trợ thu audio tab'); return; }
     try {
       const source = await navigator.mediaDevices.getDisplayMedia({ video:true, audio:true });
       if (!source.getAudioTracks().length) { source.getTracks().forEach(track => track.stop()); status('Hãy bật Chia sẻ âm thanh tab khi chọn màn hình'); return; }
-      const stream = new MediaStream(source.getAudioTracks());
-      const mimeType = ['audio/webm;codecs=opus', 'audio/webm'].find(type => MediaRecorder.isTypeSupported(type));
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      audioExport.recorder = recorder; audioExport.source = source; audioExport.chunks = []; audioExport.chapter = chapters[state.index];
-      recorder.ondataavailable = event => { if (event.data.size) audioExport.chunks.push(event.data); };
-      recorder.start(250);
-      $('exportAudioButton').textContent = 'Dừng thu audio';
-      state.voice = findVoice(); state.paragraph = 0; state.chunkParagraph = -1; speakParagraph();
+      recordAudioChapter(source, state.index);
       status('Đang đọc và thu audio chương này…');
+    } catch (error) { status(error?.name === 'NotAllowedError' ? 'Bạn chưa cho phép chia sẻ audio tab' : `Không thể thu audio: ${error.message}`); }
+  };
+  const startAllAudioExport = async () => {
+    if (audioExport.recorder || audioExport.batch) { audioExport.batch = null; finishAudioExport(false); return; }
+    if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') { status('Trình duyệt không hỗ trợ thu audio tab'); return; }
+    try {
+      const source = await navigator.mediaDevices.getDisplayMedia({ video:true, audio:true });
+      if (!source.getAudioTracks().length) { source.getTracks().forEach(track => track.stop()); status('Hãy bật Chia sẻ âm thanh tab khi chọn màn hình'); return; }
+      const batch = { index:0, next:null };
+      batch.next = () => {
+        const nextIndex = batch.index + 1;
+        if (nextIndex >= chapters.length) {
+          source.getTracks().forEach(track => track.stop()); audioExport.batch = null;
+          const button = $('exportAllAudioButton'); if (button) button.textContent = 'Xuất tất cả audio';
+          status(`Đã xuất xong ${chapters.length} file audio`); return;
+        }
+        batch.index = nextIndex; recordAudioChapter(source, nextIndex, batch);
+        status(`Đang xuất audio phần ${nextIndex + 1}/${chapters.length}…`);
+      };
+      const button = $('exportAllAudioButton'); if (button) button.textContent = 'Dừng xuất audio';
+      recordAudioChapter(source, 0, batch);
+      status(`Đang xuất audio phần 1/${chapters.length}…`);
     } catch (error) { status(error?.name === 'NotAllowedError' ? 'Bạn chưa cho phép chia sẻ audio tab' : `Không thể thu audio: ${error.message}`); }
   };
   const select = (index, restore = false) => {
@@ -256,7 +285,7 @@
     const speech = getSpeech(); if (!extensionTts && !speech) { status('Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 Web Speech TTS'); return; }
     stop(); state.voice = findVoice(); state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.chunkParagraph = -1; speakParagraph();
   };
-  const stop = () => { state.speakToken += 1; state.requestId = 0; state.utterance = null; state.paused = false; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'stop' }); else getSpeech()?.cancel(); state.paragraph = -1; state.chunkParagraph = -1; syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); };
+  const stop = () => { if (audioExport.recorder) { audioExport.batch = null; finishAudioExport(false); } state.speakToken += 1; state.requestId = 0; state.utterance = null; state.paused = false; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'stop' }); else getSpeech()?.cancel(); state.paragraph = -1; state.chunkParagraph = -1; syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); };
   $('playButton').onclick = () => { testingVoice = false; speak(); };
   $('pauseButton').onclick = () => { if (!state.utterance) return; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'pause' }); else getSpeech()?.pause(); state.paused = true; syncControls(); status('\u0110\u00e3 t\u1ea1m d\u1eebng'); };
   $('resumeButton').onclick = () => { const speech = getSpeech(); if ((!extensionTts && speech?.paused) || (extensionTts && state.utterance && state.paused)) { if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'resume' }); else speech.resume(); state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); return; } state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.chunkParagraph = -1; speakParagraph(); };
@@ -299,6 +328,7 @@
   $('autoNext').onchange = event => { state.autoNext = event.target.checked; saveSettings({ autoNext:state.autoNext }); status(state.autoNext ? 'Đã bật đọc liền phần kế' : 'Đã tắt đọc liền phần kế'); };
   $('darkButton').onclick = () => { applyBackground(document.body.classList.contains('light') || document.body.classList.contains('white') ? 'night' : 'paper'); saveSettings({ background:$('background').value }); };
   $('exportAudioButton').onclick = () => void startAudioExport();
+  $('exportAllAudioButton').onclick = () => void startAllAudioExport();
   if (savedSettings.background) applyBackground(savedSettings.background); else applyBackground('night');
   $('background').onchange = event => { applyBackground(event.target.value); saveSettings({ background:event.target.value }); }; $('font').onchange = event => { document.documentElement.style.setProperty('--reader-font', event.target.value); saveSettings({ font:event.target.value }); };
   $('size').oninput = event => { document.documentElement.style.setProperty('--reader-size', `${event.target.value}px`); $('sizeValue').textContent = `${event.target.value}px`; saveSettings({ size:event.target.value }); }; $('width').oninput = event => { document.querySelector('.reader').style.maxWidth = `${event.target.value}px`; $('widthValue').textContent = `${event.target.value}px`; saveSettings({ width:event.target.value }); };

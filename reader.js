@@ -18,7 +18,8 @@
   const directExtensionTts = typeof chrome !== 'undefined' && !!chrome.runtime?.id;
   const bridgeExtensionId = 'eflagfifekpkhoiaeciaobdaiabpppbd';
   const webExtensionMessaging = !directExtensionTts && typeof chrome !== 'undefined' && typeof chrome.runtime?.sendMessage === 'function';
-  const extensionTts = true;
+  const appleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const extensionTts = !appleMobile;
   let bridgeRequestId = 0;
   const sendTtsMessage = (message, callback = () => {}) => {
     if (directExtensionTts) { chrome.runtime.sendMessage(message, callback); return; }
@@ -122,6 +123,9 @@
       if (extensionTts) {
         voiceHint.hidden = false;
         voiceHint.textContent = state.voices.length ? `Extension Chrome OS: ${state.voices.length} voice Việt khả dụng.` : 'Extension chưa trả về voice Chrome OS.';
+      } else if (appleMobile) {
+        voiceHint.hidden = false;
+        voiceHint.textContent = 'iPhone/iPad: đang dùng voice tiếng Việt của iOS. ChromeOS Vietnamese chỉ có trên ChromeOS/Extension.';
       } else if (state.voices.length <= 1) {
         voiceHint.hidden = false;
         voiceHint.textContent = 'Web Vercel chỉ thấy voice trình duyệt (thường là Linh). Muốn dùng Chrome OS Vietnamese 1–5, hãy mở bản extension Chrome OS.';

@@ -177,20 +177,26 @@
     if (!recorder) return;
     const complete = () => {
       const batch = audioExport.batch;
-      if (save && audioExport.chunks.length) {
+      let keepBatch = Boolean(batch);
+      if (save) {
         const blob = new Blob(audioExport.chunks, { type: recorder.mimeType || 'audio/webm' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        const name = String(audioExport.chapter?.title || `Phan-${state.index + 1}`).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
-        link.href = url; link.download = `${String(state.index + 1).padStart(3, '0')}-${name || `Phan-${state.index + 1}`}.webm`; link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        status(`Đã lưu audio: ${link.download}`);
+        if (blob.size < 1000) {
+          keepBatch = false;
+          status('Không có âm thanh được thu. Với Extension ChromeOS, hãy bật chia sẻ âm thanh hệ thống hoặc xuất từ localhost.');
+        } else {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          const name = String(audioExport.chapter?.title || `Phan-${state.index + 1}`).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
+          link.href = url; link.download = `${String(state.index + 1).padStart(3, '0')}-${name || `Phan-${state.index + 1}`}.webm`; link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          status(`Đã lưu audio: ${link.download}`);
+        }
       }
-      if (!batch) audioExport.source?.getTracks().forEach(track => track.stop());
-      audioExport.recorder = null; if (!batch) audioExport.source = null; audioExport.chunks = []; audioExport.chapter = null;
+      if (!keepBatch) audioExport.source?.getTracks().forEach(track => track.stop());
+      audioExport.recorder = null; if (!keepBatch) audioExport.source = null; audioExport.chunks = []; audioExport.chapter = null;
       const button = $('exportAudioButton'); if (button) button.textContent = 'Xuất audio chương này';
-      if (!batch) { const allButton = $('exportAllAudioButton'); if (allButton) allButton.textContent = 'Xuất tất cả audio'; }
-      if (batch?.next) setTimeout(batch.next, 450);
+      if (!keepBatch) { audioExport.batch = null; const allButton = $('exportAllAudioButton'); if (allButton) allButton.textContent = 'Xuất tất cả audio'; }
+      if (keepBatch && batch?.next) setTimeout(batch.next, 450);
     };
     recorder.onstop = complete;
     if (recorder.state === 'inactive') complete(); else recorder.stop();
@@ -211,7 +217,8 @@
     if (audioExport.recorder) { audioExport.batch = null; finishAudioExport(false); return; }
     if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') { status('Trình duyệt không hỗ trợ thu audio tab'); return; }
     try {
-      const source = await navigator.mediaDevices.getDisplayMedia({ video:true, audio:true });
+      status(extensionTts ? 'Trong hộp thoại chia sẻ, hãy bật âm thanh hệ thống để thu đúng voice ChromeOS…' : 'Chọn tab hiện tại và bật chia sẻ âm thanh…');
+      const source = await navigator.mediaDevices.getDisplayMedia({ video:true, audio:true, systemAudio:'include', selfBrowserSurface:'include' });
       if (!source.getAudioTracks().length) { source.getTracks().forEach(track => track.stop()); status('Hãy bật Chia sẻ âm thanh tab khi chọn màn hình'); return; }
       recordAudioChapter(source, state.index);
       status('Đang đọc và thu audio chương này…');
@@ -221,7 +228,8 @@
     if (audioExport.recorder || audioExport.batch) { audioExport.batch = null; finishAudioExport(false); return; }
     if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') { status('Trình duyệt không hỗ trợ thu audio tab'); return; }
     try {
-      const source = await navigator.mediaDevices.getDisplayMedia({ video:true, audio:true });
+      status(extensionTts ? 'Trong hộp thoại chia sẻ, hãy bật âm thanh hệ thống để thu đúng voice ChromeOS…' : 'Chọn tab hiện tại và bật chia sẻ âm thanh…');
+      const source = await navigator.mediaDevices.getDisplayMedia({ video:true, audio:true, systemAudio:'include', selfBrowserSurface:'include' });
       if (!source.getAudioTracks().length) { source.getTracks().forEach(track => track.stop()); status('Hãy bật Chia sẻ âm thanh tab khi chọn màn hình'); return; }
       const batch = { index:0, next:null };
       batch.next = () => {

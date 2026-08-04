@@ -1,7 +1,7 @@
 const isVietnamese = voice => /(?:chrome\s*os|google)\s*(?:vietnamese|ti\u1ebfng\s*vi\u1ec7t)/i.test(`${voice.voiceName || ''} ${voice.name || ''}`) || /^(vi|vie)([-_]|$)/i.test(voice.lang || '');
 const isVietnamese2 = voice => /chrome\s*os\s*(?:vietnamese|ti\u1ebfng\s*vi\u1ec7t)\s*2/i.test(`${voice.voiceName || ''} ${voice.name || ''}`);
 let requestId = 0;
-chrome.action.onClicked.addListener(() => chrome.tabs.create({ url: chrome.runtime.getURL('index.html') }));
+if (chrome.action?.onClicked) chrome.action.onClicked.addListener(() => chrome.tabs.create({ url: chrome.runtime.getURL('index.html') }));
 const handleMessage = (message, sender, sendResponse) => {
   if (message.type === 'GET_VOICES') { chrome.tts.getVoices(voices => sendResponse({ voices: voices.filter(isVietnamese) })); return true; }
   if (message.type === 'TTS_SPEAK') {

@@ -5,5 +5,10 @@
   "description": "Đọc từng phần DOCX bằng voice tiếng Việt Chrome OS.",
   "permissions": ["tts"],
   "background": { "service_worker": "tts-background.js" },
+  "content_scripts": [{
+    "matches": ["https://viet-docx-tts-reader.vercel.app/*"],
+    "js": ["tts-bridge.js"],
+    "run_at": "document_start"
+  }],
   "action": { "default_title": "Vietnamese DOCX Reader" }
 }

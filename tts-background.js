@@ -2,7 +2,7 @@ const isVietnamese = voice => /(?:chrome\s*os|google)\s*(?:vietnamese|ti\u1ebfng
 const isVietnamese2 = voice => /chrome\s*os\s*(?:vietnamese|ti\u1ebfng\s*vi\u1ec7t)\s*2/i.test(`${voice.voiceName || ''} ${voice.name || ''}`);
 let requestId = 0;
 chrome.action.onClicked.addListener(() => chrome.tabs.create({ url: chrome.runtime.getURL('index.html') }));
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+const handleMessage = (message, sender, sendResponse) => {
   if (message.type === 'GET_VOICES') { chrome.tts.getVoices(voices => sendResponse({ voices: voices.filter(isVietnamese) })); return true; }
   if (message.type === 'TTS_SPEAK') {
     chrome.tts.getVoices(voices => {
@@ -15,4 +15,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === 'TTS_CONTROL') { if (message.action === 'pause') chrome.tts.pause(); if (message.action === 'resume') chrome.tts.resume(); if (message.action === 'stop') { requestId += 1; chrome.tts.stop(); } sendResponse({ ok:true }); return true; }
   return false;
-});
+};
+chrome.runtime.onMessage.addListener(handleMessage);
+chrome.runtime.onMessageExternal.addListener(handleMessage);

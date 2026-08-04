@@ -16,10 +16,21 @@
   const settings = { ...savedSettings };
   const state = { index: 0, utterance: null, paused: false, speakToken: 0, requestId: 0, voice: null, voices: [], paragraph: -1, chunkIndex: 0, chunkParagraph: -1, chunks: [], volume: Number(savedSettings.volume ?? 1), pitch: Number(savedSettings.pitch ?? 1), autoScroll: savedSettings.autoScroll !== false, autoNext: savedSettings.autoNext === true, resumeChapter: Number(savedProgress.chapter) || 0, resumeParagraph: progressFor(Number(savedProgress.chapter) || 0) };
   const directExtensionTts = typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+  const bridgeExtensionId = 'eflagfifekpkhoiaeciaobdaiabpppbd';
+  const webExtensionMessaging = !directExtensionTts && typeof chrome !== 'undefined' && typeof chrome.runtime?.sendMessage === 'function';
   const extensionTts = true;
   let bridgeRequestId = 0;
-  const sendTtsMessage = (message, callback) => {
+  const sendTtsMessage = (message, callback = () => {}) => {
     if (directExtensionTts) { chrome.runtime.sendMessage(message, callback); return; }
+    if (webExtensionMessaging) {
+      try {
+        chrome.runtime.sendMessage(bridgeExtensionId, message, response => {
+          const error = chrome.runtime.lastError;
+          callback(error ? { ok:false, error:error.message } : response);
+        });
+        return;
+      } catch (error) { callback({ ok:false, error:error.message }); return; }
+    }
     const id = ++bridgeRequestId;
     const handler = event => {
       if (event.source !== window || event.data?.source !== 'viet-docx-tts-web' || event.data?.direction !== 'from-extension' || event.data?.id !== id) return;

@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Vietnamese ChromeOS TTS Bridge",
+  "version": "1.1.1",
+  "description": "Cầu nối để web DOCX Reader dùng voice ChromeOS tiếng Việt.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoh0UP8X+nIQc51WpJuYd9ffi7ofM5Emzadblpikb11i5Y/IhZalv4bD3XsGdJKgAkRrkhOlv3MPxEDwbiyyH7rgX9dyVJGgtHiiEFIWRkFjHoKErLtDQklFfF1FycOJOhMIkS2koQou87eNBaVRxXPU2tX7beuUjuIL6AQ+tQTgm4OfA3zUkSKaD7UzoFydRmZGfPWyMeYXJ1BvM7hNwrwD0MLfC3unMkPfop0X3vpf63Dc6UhwYwD1MvDQzepHKkpyNZdGhJ7eI4TXpBZOdWLehIzQ3k0HlulAikTmsaWPO3Wuts8ropafAFatyAR+UeF9RGw3kN3ebwWvoTDfOdQIDAQAB",
+  "permissions": ["tts"],
+  "background": { "service_worker": "tts-background.js" },
+  "content_scripts": [{
+    "matches": ["https://*.vercel.app/*", "http://127.0.0.1/*"],
+    "js": ["tts-bridge.js"],
+    "run_at": "document_start"
+  }],
+  "externally_connectable": {
+    "matches": ["https://*.vercel.app/*", "http://127.0.0.1/*"]
+  }
+}

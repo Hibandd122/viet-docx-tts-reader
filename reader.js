@@ -19,7 +19,8 @@
   const bridgeExtensionId = 'eflagfifekpkhoiaeciaobdaiabpppbd';
   const webExtensionMessaging = !directExtensionTts && typeof chrome !== 'undefined' && typeof chrome.runtime?.sendMessage === 'function';
   const appleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const extensionTts = !appleMobile;
+  const localWebSpeech = /^(localhost|127\.0\.0\.1|::1)$/i.test(location.hostname);
+  const extensionTts = !appleMobile && !localWebSpeech && (directExtensionTts || webExtensionMessaging);
   let bridgeRequestId = 0;
   const sendTtsMessage = (message, callback = () => {}) => {
     if (directExtensionTts) { chrome.runtime.sendMessage(message, callback); return; }
@@ -120,7 +121,10 @@
     $('voice').innerHTML = state.voices.length ? state.voices.map((v, i) => `<option value="${i}">${escapeHtml(v.voiceName || v.name || v.lang)}</option>`).join('') : '<option value="">Không tìm thấy voice Việt</option>';
     const voiceHint = $('voiceHint');
     if (voiceHint) {
-      if (extensionTts) {
+      if (localWebSpeech) {
+        voiceHint.hidden = false;
+        voiceHint.textContent = 'Localhost: đang dùng trực tiếp voice ChromeOS của trình duyệt.';
+      } else if (extensionTts) {
         voiceHint.hidden = false;
         voiceHint.textContent = state.voices.length ? `Extension Chrome OS: ${state.voices.length} voice Việt khả dụng.` : 'Extension chưa trả về voice Chrome OS.';
       } else if (appleMobile) {

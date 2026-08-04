@@ -1,6 +1,6 @@
 {
-  "name": "Vol 9 · Trình đọc tiếng Việt",
-  "short_name": "Vol 9 Reader",
+  "name": "Vietnamese DOCX Reader",
+  "short_name": "DOCX Reader",
   "description": "Trình đọc DOCX tiếng Việt có TTS và lưu tiến độ.",
   "lang": "vi-VN",
   "dir": "ltr",

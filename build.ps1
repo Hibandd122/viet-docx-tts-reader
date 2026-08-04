@@ -1,9 +1,22 @@
-param([string]$Source = 'D:\Extension\Vol9_VI.docx')
+param([string]$Source = '')
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $chaptersDir = Join-Path $root 'chapters'
 $assetsDir = Join-Path $root 'assets'
+if ([string]::IsNullOrWhiteSpace($Source)) {
+  $candidates = @(Get-ChildItem -LiteralPath $root -File -Filter '*.docx' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+  if (-not $candidates) {
+    $parent = Split-Path -Parent $root
+    $candidates = @(Get-ChildItem -LiteralPath $parent -File -Filter '*.docx' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+  }
+  if (-not $candidates) { throw "Không tìm thấy file DOCX. Hãy đặt một file .docx cạnh build.ps1 hoặc truyền -Source đường_dẫn.docx." }
+  $Source = $candidates[0].FullName
+  if ($candidates.Count -gt 1) { Write-Output "Tự chọn DOCX mới nhất: $([IO.Path]::GetFileName($Source))" }
+} else {
+  $Source = (Resolve-Path -LiteralPath $Source).Path
+}
+if (-not (Test-Path -LiteralPath $Source -PathType Leaf)) { throw "Không tìm thấy file DOCX: $Source" }
 New-Item -ItemType Directory -Force -Path $chaptersDir | Out-Null
 New-Item -ItemType Directory -Force -Path $assetsDir | Out-Null
 Get-ChildItem -LiteralPath $chaptersDir -Filter '*.docx' -ErrorAction SilentlyContinue | Remove-Item -Force
@@ -82,6 +95,7 @@ foreach ($font in $sourceZip.Entries | Where-Object { $_.FullName -like 'word/fo
 $body = $xml.SelectSingleNode('//w:body', $ns)
 $nodes = @($body.ChildNodes | Where-Object { $_.LocalName -in @('p','tbl') })
 $headingNodes = @($nodes | Where-Object { $_.LocalName -eq 'p' -and $_.SelectSingleNode('./w:pPr/w:pStyle/@w:val', $ns).Value -eq 'Heading2' })
+if (-not $headingNodes) { throw "File DOCX không có Heading 2 nào để tách chương." }
 $records = @()
 for ($i = 0; $i -lt $headingNodes.Count; $i++) {
   $heading = $headingNodes[$i]
@@ -102,6 +116,13 @@ for ($i = 0; $i -lt $headingNodes.Count; $i++) {
   $records += [ordered]@{ label = "Phần $($i + 1)"; title = $title; file = "chapters/$fileName"; blocks = @($blocks) }
 }
 $sourceZip.Dispose()
-$json = $records | ConvertTo-Json -Depth 5 -Compress
+$jsonItems = @($records | ForEach-Object { ConvertTo-Json -InputObject $_ -Depth 5 -Compress })
+$json = '[' + ($jsonItems -join ',') + ']'
 Set-Content -LiteralPath (Join-Path $root 'chapters.js') -Value "window.CHAPTERS = $json;" -Encoding UTF8
+$sourceName = [IO.Path]::GetFileName($Source)
+$title = [IO.Path]::GetFileNameWithoutExtension($Source)
+$storageKey = (($title -replace '[^\p{L}\p{Nd}]+', '-') -replace '(^-|-$)', '').ToLowerInvariant()
+if (-not $storageKey) { $storageKey = 'docx-reader' }
+$config = [ordered]@{ title = $title; sourceName = $sourceName; storageKey = $storageKey } | ConvertTo-Json -Compress
+Set-Content -LiteralPath (Join-Path $root 'reader-config.js') -Value "window.READER_CONFIG = $config;" -Encoding UTF8
 Write-Output "Đã tách $($records.Count) chương vào $chaptersDir"

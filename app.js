@@ -1,11 +1,18 @@
 (() => {
   const chapters = window.CHAPTERS || [];
+  const readerConfig = window.READER_CONFIG || {};
+  const readerTitle = readerConfig.title || 'DOCX Reader';
+  const storageKey = String(readerConfig.storageKey || readerTitle).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'docx-reader';
+  const progressStorageKey = `docx-reader:${storageKey}:progress`;
+  const settingsStorageKey = `docx-reader:${storageKey}:settings`;
   const $ = id => document.getElementById(id);
-  const savedProgress = (() => { try { return JSON.parse(localStorage.getItem('vol9-reading-progress') || '{}'); } catch { return {}; } })();
-  const savedSettings = (() => { try { return JSON.parse(localStorage.getItem('vol9-reader-settings') || '{}'); } catch { return {}; } })();
+  document.title = `${readerTitle} · Trình đọc tiếng Việt`;
+  document.querySelector('h1')?.replaceChildren(`${readerTitle} · Tiếng Việt`);
+  const savedProgress = (() => { try { return JSON.parse(localStorage.getItem(progressStorageKey) || '{}'); } catch { return {}; } })();
+  const savedSettings = (() => { try { return JSON.parse(localStorage.getItem(settingsStorageKey) || '{}'); } catch { return {}; } })();
   const chapterProgress = { ...(savedProgress.chapters || {}) };
   const progressFor = index => Math.max(0, Number(chapterProgress[index] ?? (Number(savedProgress.chapter) === index ? savedProgress.paragraph : 0)) || 0);
-  const saveProgress = (chapter, paragraph) => { chapterProgress[chapter] = Math.max(0, Number(paragraph) || 0); localStorage.setItem('vol9-reading-progress', JSON.stringify({ chapter, paragraph:chapterProgress[chapter], chapters:chapterProgress })); };
+  const saveProgress = (chapter, paragraph) => { chapterProgress[chapter] = Math.max(0, Number(paragraph) || 0); localStorage.setItem(progressStorageKey, JSON.stringify({ chapter, paragraph:chapterProgress[chapter], chapters:chapterProgress })); };
   const settings = { ...savedSettings };
   const state = { index: 0, utterance: null, paused: false, speakToken: 0, requestId: 0, voice: null, voices: [], paragraph: -1, chunkIndex: 0, chunkParagraph: -1, chunks: [], volume: Number(savedSettings.volume ?? 1), pitch: Number(savedSettings.pitch ?? 1), autoScroll: savedSettings.autoScroll !== false, autoNext: savedSettings.autoNext === true, resumeChapter: Number(savedProgress.chapter) || 0, resumeParagraph: progressFor(Number(savedProgress.chapter) || 0) };
   const extensionTts = typeof chrome !== 'undefined' && !!chrome.runtime?.id;
@@ -27,7 +34,7 @@
       button.textContent = '↺ Xóa vị trí đã lưu';
       clearTimeout(resetConfirmTimer);
       chapters.forEach((_, index) => { chapterProgress[index] = 0; });
-      localStorage.setItem('vol9-reading-progress', JSON.stringify({ chapter:state.index, paragraph:0, chapters:chapterProgress }));
+      localStorage.setItem(progressStorageKey, JSON.stringify({ chapter:state.index, paragraph:0, chapters:chapterProgress }));
       state.resumeChapter = state.index; state.resumeParagraph = 0;
       stop(); renderList(); select(state.index, true);
       status('Đã xóa vị trí đọc đã lưu');
@@ -36,7 +43,7 @@
   if (extensionTts) chrome.runtime.onMessage.addListener(message => { if (!testingVoice || message.type !== 'TTS_EVENT') return; if (message.event.type === 'end') { testingVoice = false; status('Đã thử xong voice'); } if (message.event.type === 'error') { testingVoice = false; status(message.event.errorMessage || 'TTS lỗi khi thử voice'); } });
   const status = text => { $('status').textContent = text; };
   const updateProgress = (index, total) => { const progress = $('chapterProgress'); if (progress) progress.style.width = `${total ? Math.max(0, Math.min(100, ((index + 1) / total) * 100)) : 0}%`; };
-  const saveSettings = patch => { Object.assign(settings, { volume:state.volume, pitch:state.pitch, ...patch }); localStorage.setItem('vol9-reader-settings', JSON.stringify(settings)); };
+  const saveSettings = patch => { Object.assign(settings, { volume:state.volume, pitch:state.pitch, ...patch }); localStorage.setItem(settingsStorageKey, JSON.stringify(settings)); };
   const applyBackground = theme => { document.body.classList.toggle('light', theme === 'paper'); document.body.classList.toggle('white', theme === 'white'); $('background').value = theme; };
   const applyAlignment = align => { const value = align === 'justify' ? 'justify' : 'left'; document.documentElement.style.setProperty('--reader-align', value); document.querySelectorAll('[data-align]').forEach(button => button.classList.toggle('active', button.dataset.align === value)); };
   const nowReading = text => { $('nowReading').textContent = text; };
@@ -181,7 +188,7 @@
   $('rate').oninput = event => { const rate = Number(event.target.value); $('rateValue').textContent = `${rate.toFixed(2)}\u00d7`; saveSettings({ rate }); };
   $('voice').onchange = event => { state.voice = state.voices[Number(event.target.value)] || null; saveSettings({ voice:state.voice?.voiceName || state.voice?.name || '' }); status(state.voice ? `\u0110\u00e3 ch\u1ecdn: ${state.voice.voiceName || state.voice.name}` : 'Ch\u01b0a ch\u1ecdn voice'); };
   $('voiceTestButton').onclick = () => {
-    const sample = 'Xin chào. Đây là bản thử giọng đọc tiếng Việt của trình đọc Vol 9.';
+    const sample = `Xin chào. Đây là bản thử giọng đọc tiếng Việt của ${readerTitle}.`;
     const selected = findVoice();
     testingVoice = true;
     stop();

@@ -167,7 +167,7 @@
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         const name = String(audioExport.chapter?.title || `Phan-${state.index + 1}`).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
-        link.href = url; link.download = `${name || `Phan-${state.index + 1}`}.webm`; link.click();
+        link.href = url; link.download = `${String(state.index + 1).padStart(3, '0')}-${name || `Phan-${state.index + 1}`}.webm`; link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
         status(`Đã lưu audio: ${link.download}`);
       }

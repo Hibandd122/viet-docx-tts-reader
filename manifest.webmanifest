@@ -1,0 +1,12 @@
+{
+  "name": "Vol 9 · Trình đọc tiếng Việt",
+  "short_name": "Vol 9 Reader",
+  "description": "Trình đọc DOCX tiếng Việt có TTS và lưu tiến độ.",
+  "lang": "vi-VN",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#050505"
+}

@@ -7,12 +7,12 @@
   "permissions": ["tts"],
   "background": { "service_worker": "tts-background.js" },
   "content_scripts": [{
-    "matches": ["https://*.vercel.app/*", "http://127.0.0.1/*"],
+    "matches": ["https://*.vercel.app/*", "http://127.0.0.1/*", "http://localhost/*"],
     "js": ["tts-bridge.js"],
     "run_at": "document_start"
   }],
   "externally_connectable": {
-    "matches": ["https://*.vercel.app/*", "http://127.0.0.1/*"]
+    "matches": ["https://*.vercel.app/*", "http://127.0.0.1/*", "http://localhost/*"]
   },
   "action": { "default_title": "Vietnamese DOCX Reader" }
 }

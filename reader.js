@@ -81,14 +81,15 @@
   const escapeHtml = text => text.replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c]));
   const fontName = name => ({ Montserrat:'Montserrat Local', QuattrocentoSans:'Quattrocento Local', Arial:'Arial', 'Arial Unicode MS':'Arial Unicode MS', Cambria:'Cambria', Georgia:'Georgia', 'Liberation Serif':'Liberation Serif' }[name] || 'Montserrat Local');
   const renderRuns = block => block.runs?.length ? block.runs.map(run => `<span style="font-family:'${fontName(run.font)}';${run.bold ? 'font-weight:700;' : ''}${run.italic ? 'font-style:italic;' : ''}">${escapeHtml(run.text)}</span>`).join('') : escapeHtml(block.text);
-  const splitForSpeechSafe = text => {
+  const splitForSpeechSafe = (text, maxLength = 900) => {
     const parts = [];
     let rest = text.replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '').replace(/\s+/g, ' ').trim();
-    while (rest.length > 900) {
+    const minimumCut = Math.floor(maxLength * 0.45);
+    while (rest.length > maxLength) {
       let cut = -1;
-      for (const punctuation of ['.', '!', '?', '\u3002', '\uFF01', '\uFF1F']) cut = Math.max(cut, rest.lastIndexOf(punctuation, 900));
-      if (cut < 400) cut = rest.lastIndexOf(' ', 900);
-      if (cut < 1) cut = 900;
+      for (const punctuation of ['.', '!', '?', '\u3002', '\uFF01', '\uFF1F']) cut = Math.max(cut, rest.lastIndexOf(punctuation, maxLength));
+      if (cut < minimumCut) cut = rest.lastIndexOf(' ', maxLength);
+      if (cut < 1) cut = maxLength;
       parts.push(rest.slice(0, cut + 1).trim());
       rest = rest.slice(cut + 1).trim();
     }
@@ -157,6 +158,20 @@
     $('chapterEmpty').hidden = visible > 0;
   };
   const audioExport = { recorder:null, source:null, chunks:[], chapter:null, batch:null };
+  const exportChunkLimit = 5000;
+  const exportSpeech = (paragraphs, start) => {
+    let end = start;
+    let length = 0;
+    while (end < paragraphs.length) {
+      const addition = paragraphs[end].trim();
+      const nextLength = length ? length + 2 + addition.length : addition.length;
+      if (length && nextLength > exportChunkLimit) break;
+      length = nextLength;
+      end += 1;
+    }
+    if (end === start) end += 1;
+    return { text: paragraphs.slice(start, end).join('\n\n'), end };
+  };
   const finishAudioExport = save => {
     const recorder = audioExport.recorder;
     if (!recorder) return;
@@ -187,9 +202,10 @@
     const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     audioExport.recorder = recorder; audioExport.source = source; audioExport.chunks = []; audioExport.chapter = chapters[index]; audioExport.batch = batch;
     recorder.ondataavailable = event => { if (event.data.size) audioExport.chunks.push(event.data); };
-    recorder.start(250);
+    // Ít sự kiện data hơn giúp batch export nhẹ hơn khi xuất hàng trăm chương.
+    recorder.start(1000);
     $('exportAudioButton').textContent = batch ? `Đang xuất ${index + 1}/${chapters.length}` : 'Dừng thu audio';
-    state.voice = findVoice(); state.paragraph = 0; state.chunkParagraph = -1; speakParagraph();
+    state.voice = findVoice(); state.paragraph = 0; state.chunkParagraph = -1; state.exportEndParagraph = 0; speakParagraph();
   };
   const startAudioExport = async () => {
     if (audioExport.recorder) { audioExport.batch = null; finishAudioExport(false); return; }
@@ -259,7 +275,17 @@
       if (state.autoNext && state.index < chapters.length - 1) { select(state.index + 1); state.paragraph = 0; state.chunkParagraph = -1; speakParagraph(); return; }
       state.utterance = null; state.paused = false; syncControls(); document.querySelectorAll('.content p.reading-now').forEach(p => p.classList.remove('reading-now')); nowReading('\u0110\u00e3 \u0111\u1ecdc xong'); status('\u0110\u00e3 \u0111\u1ecdc xong ch\u01b0\u01a1ng'); return;
     }
-    if (state.chunkParagraph !== state.paragraph) { state.chunks = splitForSpeechSafe(chapter.paragraphs[state.paragraph]); state.chunkParagraph = state.paragraph; state.chunkIndex = 0; }
+    if (state.chunkParagraph !== state.paragraph) {
+      // TTS đọc thường dùng đoạn nhỏ để cuộn mượt. Khi xuất file, gộp nhiều
+      // đoạn liên tiếp để giảm số lần gọi TTS và khoảng ngắt giữa các đoạn.
+      const exportSegment = audioExport.recorder ? exportSpeech(chapter.paragraphs, state.paragraph) : null;
+      const text = exportSegment?.text || chapter.paragraphs[state.paragraph];
+      const chunkLimit = audioExport.recorder ? exportChunkLimit : 900;
+      state.exportEndParagraph = exportSegment?.end || state.paragraph + 1;
+      state.chunks = splitForSpeechSafe(text, chunkLimit);
+      state.chunkParagraph = state.paragraph;
+      state.chunkIndex = 0;
+    }
     markReading(state.paragraph);
     nowReading(`\u0110ang \u0111\u1ecdc \u0111o\u1ea1n ${state.paragraph + 1}/${chapter.paragraphs.length}`);
     if (extensionTts) {
@@ -276,7 +302,7 @@
     const utterance = new SpeechSynthesisUtterance(state.chunks[state.chunkIndex]);
     utterance.lang = 'vi-VN'; if (state.voice) utterance.voice = state.voice; utterance.rate = Number($('rate').value); utterance.pitch = state.pitch; utterance.volume = state.volume;
     utterance.onboundary = () => markReading(state.paragraph);
-    utterance.onend = () => { if (state.utterance !== utterance) return; if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); } else { state.paragraph += 1; state.chunkParagraph = -1; speakParagraph(); } };
+    utterance.onend = () => { if (state.utterance !== utterance) return; if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); } else { state.paragraph = audioExport.recorder ? state.exportEndParagraph : state.paragraph + 1; state.chunkParagraph = -1; speakParagraph(); } };
     utterance.onerror = event => { state.utterance = null; syncControls(); status(`TTS l\u1ed7i: ${event.error || 'kh\u00f4ng ph\u00e1t \u0111\u01b0\u1ee3c'}`); };
     state.utterance = utterance; state.paused = false; syncControls(); getSpeech().speak(utterance);
   };
@@ -342,7 +368,7 @@
   });
   $('voiceButton').onclick = async () => { await loadVoices(); const names = state.voices.map(v => v.voiceName || v.name || v.lang); const voice2 = state.voices.find(isVoice2); status(voice2 ? `\u0110\u00e3 t\u00ecm th\u1ea5y: ${voice2.voiceName || voice2.name}` : names.length ? `Kh\u00f4ng c\u00f3 Vietnamese 2. Voice hi\u1ec7n c\u00f3: ${names.join(', ')}` : 'Kh\u00f4ng t\u00ecm th\u1ea5y voice Vi\u1ec7t'); };
   if (!extensionTts && getSpeech()) getSpeech().onvoiceschanged = () => void loadVoices();
-  const handleReadingEvent = message => { if (message.type !== 'TTS_EVENT' || !state.utterance || state.paragraph < 0 || (state.requestId && message.requestId !== state.requestId)) return; if (message.event.type === 'word' || message.event.type === 'sentence') markReading(state.paragraph); if (message.event.type === 'end') { if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); } else { state.paragraph += 1; state.chunkParagraph = -1; speakParagraph(); } } if (message.event.type === 'error') { state.utterance = null; state.paused = false; syncControls(); status(message.event.errorMessage || 'TTS l\u1ed7i'); } };
+  const handleReadingEvent = message => { if (message.type !== 'TTS_EVENT' || !state.utterance || state.paragraph < 0 || (state.requestId && message.requestId !== state.requestId)) return; if (message.event.type === 'word' || message.event.type === 'sentence') markReading(state.paragraph); if (message.event.type === 'end') { if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); } else { state.paragraph = audioExport.recorder ? state.exportEndParagraph : state.paragraph + 1; state.chunkParagraph = -1; speakParagraph(); } } if (message.event.type === 'error') { state.utterance = null; state.paused = false; syncControls(); status(message.event.errorMessage || 'TTS l\u1ed7i'); } };
   if (directExtensionTts) chrome.runtime.onMessage.addListener(handleReadingEvent);
   if (!directExtensionTts) window.addEventListener('message', event => { if (event.data?.source === 'viet-docx-tts-web' && event.data?.event) handleReadingEvent(event.data.event); });
   renderList(); select(Math.min(state.resumeChapter, Math.max(0, chapters.length - 1)), true); syncControls(); void loadVoices();

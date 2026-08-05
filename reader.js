@@ -115,11 +115,12 @@
     updateListProgress(state.index);
   };
   const isVoice2 = v => /chrome\s*os\s*(?:vietnamese|ti\u1ebfng\s*vi\u1ec7t)\s*2/i.test(`${v.name || ''} ${v.voiceName || ''}`);
-  const findVoice = () => state.voice || state.voices.find(isVoice2) || state.voices[0] || null;
+  const isSiriVoice = v => /siri/i.test(`${v.name || ''} ${v.voiceName || ''} ${v.voiceURI || ''}`);
+  const findVoice = () => state.voice || (appleMobile && state.voices.find(isSiriVoice)) || state.voices.find(isVoice2) || state.voices[0] || null;
   const loadVoices = async () => {
     if (extensionTts) state.voices = await new Promise(resolve => sendTtsMessage({ type:'GET_VOICES' }, response => resolve(response?.voices || [])));
     else { const speech = getSpeech(); const voices = speech ? speech.getVoices() : []; state.voices = voices.filter(v => /chrome\s*os\s*(?:vietnamese|ti\u1ebfng\s*vi\u1ec7t)|google\s*(?:vietnamese|ti\u1ebfng\s*vi\u1ec7t)|vietnamese|ti\u1ebfng\s*vi\u1ec7t/i.test(`${v.name || ''} ${v.voiceName || ''}`) || /^(vi|vie)([-_]|$)/i.test(v.lang || '')); }
-    $('voice').innerHTML = state.voices.length ? state.voices.map((v, i) => `<option value="${i}">${escapeHtml(v.voiceName || v.name || v.lang)}</option>`).join('') : '<option value="">Không tìm thấy voice Việt</option>';
+    $('voice').innerHTML = state.voices.length ? state.voices.map((v, i) => `<option value="${i}">${escapeHtml(appleMobile && isSiriVoice(v) ? `Siri · ${v.voiceName || v.name || v.lang}` : (v.voiceName || v.name || v.lang))}</option>`).join('') : '<option value="">Không tìm thấy voice Việt</option>';
     const voiceHint = $('voiceHint');
     if (voiceHint) {
       if (localWebSpeech) {
@@ -130,7 +131,7 @@
         voiceHint.textContent = state.voices.length ? `Extension Chrome OS: ${state.voices.length} voice Việt khả dụng.` : 'Extension chưa trả về voice Chrome OS.';
       } else if (appleMobile) {
         voiceHint.hidden = false;
-        voiceHint.textContent = 'iPhone/iPad: đang dùng voice tiếng Việt của iOS. ChromeOS Vietnamese chỉ có trên ChromeOS/Extension.';
+        voiceHint.textContent = state.voices.some(isSiriVoice) ? 'iPhone/iPad: đã ưu tiên Siri tiếng Việt của iOS.' : 'iPhone/iPad: Safari chưa trả về voice Siri; đang dùng voice tiếng Việt hệ thống.';
       } else if (state.voices.length <= 1) {
         voiceHint.hidden = false;
         voiceHint.textContent = 'Web Vercel chỉ thấy voice trình duyệt (thường là Linh). Muốn dùng Chrome OS Vietnamese 1–5, hãy mở bản extension Chrome OS.';
@@ -138,7 +139,7 @@
         voiceHint.hidden = true;
       }
     }
-    state.voice = state.voices.find(v => (v.voiceName || v.name || '') === savedSettings.voice) || state.voices.find(isVoice2) || state.voices[0] || null;
+    state.voice = state.voices.find(v => (v.voiceName || v.name || '') === savedSettings.voice) || (appleMobile && state.voices.find(isSiriVoice)) || state.voices.find(isVoice2) || state.voices[0] || null;
     if (state.voice) $('voice').value = String(state.voices.indexOf(state.voice));
   };
   const paragraphTotal = chapter => chapter.paragraphs?.length || chapter.blocks?.filter(block => block.type === 'p').length || 0;

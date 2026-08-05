@@ -28,6 +28,7 @@
     { voiceName:'vi-VN-NamMinhNeural', lang:'vi-VN', label:'Edge TTS · Nam Minh (nam)' }
   ];
   let edgeAudioContext = null;
+  let edgePrefetch = null;
   let bridgeRequestId = 0;
   const sendTtsMessage = (message, callback = () => {}) => {
     if (directExtensionTts) { chrome.runtime.sendMessage(message, callback); return; }
@@ -288,6 +289,11 @@
     if (savedParagraph > 0) nowReading(`S\u1eb5n s\u00e0ng ti\u1ebfp t\u1ee5c t\u1eeb \u0111o\u1ea1n ${savedParagraph + 1}/${chapter.paragraphs.length}`);
     $('prevButton').disabled = index === 0; $('nextButton').disabled = index === chapters.length - 1;
   };
+  const applyEdgeAudioControls = audio => {
+    audio.playbackRate = Number($('rate').value);
+    if (audio.edgeGain) audio.edgeGain.gain.value = state.volume;
+    else audio.volume = state.volume;
+  };
   const edgeAudioFor = (text, voice) => {
     const url = new URL(edgeTtsEndpoint, location.href);
     const pitch = Math.round((state.pitch - 1) * 20);
@@ -300,7 +306,6 @@
     url.searchParams.set('volume', '100%');
     const audio = new Audio(url.href);
     audio.preload = 'auto';
-    audio.playbackRate = Number($('rate').value);
     audio.volume = state.volume;
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (AudioContextClass) {
@@ -316,6 +321,33 @@
         edgeAudioContext.resume().catch(() => {});
       } catch { /* Safari có thể không cho nối lại cùng một audio element. */ }
     }
+    applyEdgeAudioControls(audio);
+    return audio;
+  };
+  const takeEdgeAudio = (text, voice) => {
+    const key = `${voice?.voiceName || ''}|${state.pitch}|${text}`;
+    if (edgePrefetch?.key === key) {
+      const ready = edgePrefetch.audio;
+      edgePrefetch = null;
+      applyEdgeAudioControls(ready);
+      return ready;
+    }
+    return edgeAudioFor(text, voice);
+  };
+  const prepareEdgeAudio = (text, voice) => {
+    const key = `${voice?.voiceName || ''}|${state.pitch}|${text}`;
+    if (edgePrefetch?.key === key) {
+      applyEdgeAudioControls(edgePrefetch.audio);
+      const ready = edgePrefetch.audio;
+      edgePrefetch = null;
+      return ready;
+    }
+    edgePrefetch?.audio?.pause();
+    edgePrefetch?.audio?.edgeSource?.disconnect();
+    const audio = edgeAudioFor(text, voice);
+    audio.onerror = () => { if (edgePrefetch?.audio === audio) edgePrefetch = null; };
+    audio.load();
+    edgePrefetch = { key, audio };
     return audio;
   };
   const speakParagraph = () => {
@@ -341,9 +373,11 @@
     nowReading(`\u0110ang \u0111\u1ecdc \u0111o\u1ea1n ${state.paragraph + 1}/${chapter.paragraphs.length}`);
     if (edgeTtsEnabled) {
       const token = ++state.speakToken;
-      const audio = edgeAudioFor(state.chunks[state.chunkIndex], state.voice);
+      const audio = takeEdgeAudio(state.chunks[state.chunkIndex], state.voice);
       state.utterance = { edge:true, token, audio };
       state.paused = false;
+      const nextText = state.chunks[state.chunkIndex + 1];
+      if (nextText) prepareEdgeAudio(nextText, state.voice);
       audio.onended = () => {
         if (state.utterance?.audio !== audio || token !== state.speakToken) return;
         audio.edgeSource?.disconnect();
@@ -379,7 +413,7 @@
     const speech = getSpeech(); if (!extensionTts && !edgeTtsEnabled && !speech) { status('Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 Web Speech TTS'); return; }
     stop(); state.voice = findVoice(); state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.chunkParagraph = -1; speakParagraph();
   };
-  const stop = () => { if (audioExport.recorder) { audioExport.batch = null; finishAudioExport(false); } state.speakToken += 1; state.requestId = 0; state.utterance?.audio?.pause(); state.utterance?.audio?.edgeSource?.disconnect(); state.utterance = null; state.paused = false; state.edgeFailed = false; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'stop' }); else if (!edgeTtsEnabled) getSpeech()?.cancel(); state.paragraph = -1; state.chunkParagraph = -1; syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); };
+  const stop = () => { if (audioExport.recorder) { audioExport.batch = null; finishAudioExport(false); } state.speakToken += 1; state.requestId = 0; state.utterance?.audio?.pause(); state.utterance?.audio?.edgeSource?.disconnect(); edgePrefetch?.audio?.pause(); edgePrefetch?.audio?.edgeSource?.disconnect(); edgePrefetch = null; state.utterance = null; state.paused = false; state.edgeFailed = false; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'stop' }); else if (!edgeTtsEnabled) getSpeech()?.cancel(); state.paragraph = -1; state.chunkParagraph = -1; syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); };
   $('playButton').onclick = () => { testingVoice = false; speak(); };
   $('pauseButton').onclick = () => { if (!state.utterance) return; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'pause' }); else if (edgeTtsEnabled) state.utterance.audio?.pause(); else getSpeech()?.pause(); state.paused = true; syncControls(); status('\u0110\u00e3 t\u1ea1m d\u1eebng'); };
   $('resumeButton').onclick = () => { const speech = getSpeech(); if (edgeTtsEnabled && state.edgeFailed) { state.edgeFailed = false; state.utterance = null; state.paused = false; state.speakToken += 1; speakParagraph(); return; } if (edgeTtsEnabled && state.utterance?.audio) { edgeAudioContext?.resume().catch(() => {}); state.utterance.audio.play().then(() => { state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); }).catch(() => { state.edgeFailed = true; state.paused = true; syncControls(); status('Edge TTS ch\u01b0a s\u1eb5n s\u00e0ng. H\u00e3y b\u1ea5m Ti\u1ebfp t\u1ee5c l\u1ea1i.'); }); return; } if ((!extensionTts && !edgeTtsEnabled && speech?.paused) || (extensionTts && state.utterance && state.paused)) { if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'resume' }); else speech.resume(); state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); return; } state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.chunkParagraph = -1; speakParagraph(); };
@@ -394,8 +428,8 @@
   if (savedSettings.size) { $('size').value = savedSettings.size; $('sizeValue').textContent = `${savedSettings.size}px`; document.documentElement.style.setProperty('--reader-size', `${savedSettings.size}px`); }
   if (savedSettings.width) { $('width').value = savedSettings.width; $('widthValue').textContent = `${savedSettings.width}px`; document.querySelector('.reader').style.maxWidth = `${savedSettings.width}px`; }
   applyAlignment(savedSettings.align || 'left');
-  $('rate').oninput = event => { const rate = Number(event.target.value); $('rateValue').textContent = `${rate.toFixed(2)}\u00d7`; if (edgeTtsEnabled && state.utterance?.audio) state.utterance.audio.playbackRate = rate; saveSettings({ rate }); };
-  $('voice').onchange = event => { state.voice = state.voices[Number(event.target.value)] || null; saveSettings({ voice:state.voice?.voiceName || state.voice?.name || '' }); status(state.voice ? `\u0110\u00e3 ch\u1ecdn: ${voiceLabel(state.voice)}` : 'Ch\u01b0a ch\u1ecdn voice'); };
+  $('rate').oninput = event => { const rate = Number(event.target.value); $('rateValue').textContent = `${rate.toFixed(2)}\u00d7`; if (edgeTtsEnabled) { if (state.utterance?.audio) state.utterance.audio.playbackRate = rate; if (edgePrefetch?.audio) edgePrefetch.audio.playbackRate = rate; } saveSettings({ rate }); };
+  $('voice').onchange = event => { state.voice = state.voices[Number(event.target.value)] || null; edgePrefetch?.audio?.pause(); edgePrefetch = null; saveSettings({ voice:state.voice?.voiceName || state.voice?.name || '' }); status(state.voice ? `\u0110\u00e3 ch\u1ecdn: ${voiceLabel(state.voice)}` : 'Ch\u01b0a ch\u1ecdn voice'); };
   $('voiceTestButton').onclick = () => {
     const sample = `Xin chào. Đây là bản thử giọng đọc tiếng Việt của ${readerTitle}.`;
     const selected = findVoice();
@@ -424,8 +458,8 @@
     utterance.onerror = event => status(`TTS lỗi: ${event.error || 'không phát được'}`);
     speech.speak(utterance); status(`Đang thử bằng ${selected?.voiceName || selected?.name || 'voice tiếng Việt'}`);
   };
-  $('volume').oninput = event => { state.volume = Number(event.target.value); $('volumeValue').textContent = `${Math.round(state.volume * 100)}%`; if (edgeTtsEnabled && state.utterance?.audio) { if (state.utterance.audio.edgeGain) state.utterance.audio.edgeGain.gain.value = state.volume; else state.utterance.audio.volume = state.volume; } saveSettings({ volume:state.volume }); };
-  $('pitch').oninput = event => { state.pitch = Number(event.target.value); $('pitchValue').textContent = state.pitch.toFixed(2); saveSettings({ pitch:state.pitch }); };
+  $('volume').oninput = event => { state.volume = Number(event.target.value); $('volumeValue').textContent = `${Math.round(state.volume * 100)}%`; if (edgeTtsEnabled) { if (state.utterance?.audio) applyEdgeAudioControls(state.utterance.audio); if (edgePrefetch?.audio) applyEdgeAudioControls(edgePrefetch.audio); } saveSettings({ volume:state.volume }); };
+  $('pitch').oninput = event => { state.pitch = Number(event.target.value); edgePrefetch?.audio?.pause(); edgePrefetch = null; $('pitchValue').textContent = state.pitch.toFixed(2); saveSettings({ pitch:state.pitch }); };
   $('autoScroll').onchange = event => { state.autoScroll = event.target.checked; saveSettings({ autoScroll:state.autoScroll }); };
   $('autoNext').onchange = event => { state.autoNext = event.target.checked; saveSettings({ autoNext:state.autoNext }); status(state.autoNext ? 'Đã bật đọc liền phần kế' : 'Đã tắt đọc liền phần kế'); };
   $('darkButton').onclick = () => { applyBackground(document.body.classList.contains('light') || document.body.classList.contains('white') ? 'night' : 'paper'); saveSettings({ background:$('background').value }); };

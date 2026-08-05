@@ -21,6 +21,12 @@
   const appleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const localWebSpeech = /^(localhost|127\.0\.0\.1|::1)$/i.test(location.hostname);
   const extensionTts = !appleMobile && !localWebSpeech && (directExtensionTts || webExtensionMessaging);
+  const edgeTtsEnabled = !extensionTts && !localWebSpeech;
+  const edgeTtsEndpoint = readerConfig.edgeTtsEndpoint || '/api/tts';
+  const edgeTtsVoices = [
+    { voiceName:'vi-VN-HoaiMyNeural', lang:'vi-VN', label:'Edge TTS · Hoài My (nữ)' },
+    { voiceName:'vi-VN-NamMinhNeural', lang:'vi-VN', label:'Edge TTS · Nam Minh (nam)' }
+  ];
   let bridgeRequestId = 0;
   const sendTtsMessage = (message, callback = () => {}) => {
     if (directExtensionTts) { chrome.runtime.sendMessage(message, callback); return; }
@@ -119,11 +125,15 @@
   const findVoice = () => state.voice || (appleMobile && state.voices.find(isSiriVoice)) || state.voices.find(isVoice2) || state.voices[0] || null;
   const loadVoices = async () => {
     if (extensionTts) state.voices = await new Promise(resolve => sendTtsMessage({ type:'GET_VOICES' }, response => resolve(response?.voices || [])));
+    else if (edgeTtsEnabled) state.voices = edgeTtsVoices;
     else { const speech = getSpeech(); const voices = speech ? speech.getVoices() : []; state.voices = voices.filter(v => /chrome\s*os\s*(?:vietnamese|ti\u1ebfng\s*vi\u1ec7t)|google\s*(?:vietnamese|ti\u1ebfng\s*vi\u1ec7t)|vietnamese|ti\u1ebfng\s*vi\u1ec7t/i.test(`${v.name || ''} ${v.voiceName || ''}`) || /^(vi|vie)([-_]|$)/i.test(v.lang || '')); }
-    $('voice').innerHTML = state.voices.length ? state.voices.map((v, i) => `<option value="${i}">${escapeHtml(appleMobile && isSiriVoice(v) ? `Siri · ${v.voiceName || v.name || v.lang}` : (v.voiceName || v.name || v.lang))}</option>`).join('') : '<option value="">Không tìm thấy voice Việt</option>';
+    $('voice').innerHTML = state.voices.length ? state.voices.map((v, i) => `<option value="${i}">${escapeHtml(v.label || (appleMobile && isSiriVoice(v) ? `Siri · ${v.voiceName || v.name || v.lang}` : (v.voiceName || v.name || v.lang)))}</option>`).join('') : '<option value="">Không tìm thấy voice Việt</option>';
     const voiceHint = $('voiceHint');
     if (voiceHint) {
-      if (localWebSpeech) {
+      if (edgeTtsEnabled) {
+        voiceHint.hidden = false;
+        voiceHint.textContent = `Đang dùng Edge TTS trực tiếp: ${state.voices.length} voice Việt.`;
+      } else if (localWebSpeech) {
         voiceHint.hidden = false;
         voiceHint.textContent = 'Localhost: đang dùng trực tiếp voice ChromeOS của trình duyệt.';
       } else if (extensionTts) {
@@ -139,7 +149,7 @@
         voiceHint.hidden = true;
       }
     }
-    state.voice = state.voices.find(v => (v.voiceName || v.name || '') === savedSettings.voice) || (appleMobile && state.voices.find(isSiriVoice)) || state.voices.find(isVoice2) || state.voices[0] || null;
+    state.voice = state.voices.find(v => (v.voiceName || v.name || '') === savedSettings.voice) || (edgeTtsEnabled ? state.voices[0] : null) || (appleMobile && state.voices.find(isSiriVoice)) || state.voices.find(isVoice2) || state.voices[0] || null;
     if (state.voice) $('voice').value = String(state.voices.indexOf(state.voice));
   };
   const paragraphTotal = chapter => chapter.paragraphs?.length || chapter.blocks?.filter(block => block.type === 'p').length || 0;
@@ -276,6 +286,19 @@
     if (savedParagraph > 0) nowReading(`S\u1eb5n s\u00e0ng ti\u1ebfp t\u1ee5c t\u1eeb \u0111o\u1ea1n ${savedParagraph + 1}/${chapter.paragraphs.length}`);
     $('prevButton').disabled = index === 0; $('nextButton').disabled = index === chapters.length - 1;
   };
+  const edgeAudioFor = (text, voice) => {
+    const url = new URL(edgeTtsEndpoint, location.href);
+    const rate = Math.round((Number($('rate').value) - 1) * 100);
+    const pitch = Math.round((state.pitch - 1) * 20);
+    url.searchParams.set('text', text);
+    url.searchParams.set('voice', voice?.voiceName || edgeTtsVoices[0].voiceName);
+    url.searchParams.set('rate', `${rate >= 0 ? '+' : ''}${rate}%`);
+    url.searchParams.set('pitch', `${pitch >= 0 ? '+' : ''}${pitch}Hz`);
+    url.searchParams.set('volume', `${Math.round(state.volume * 100)}%`);
+    const audio = new Audio(url.href);
+    audio.preload = 'auto';
+    return audio;
+  };
   const speakParagraph = () => {
     const chapter = chapters[state.index];
     if (!chapter || state.paragraph < 0) { state.utterance = null; state.paused = false; syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); return; }
@@ -297,6 +320,22 @@
     }
     markReading(state.paragraph);
     nowReading(`\u0110ang \u0111\u1ecdc \u0111o\u1ea1n ${state.paragraph + 1}/${chapter.paragraphs.length}`);
+    if (edgeTtsEnabled) {
+      const token = ++state.speakToken;
+      const audio = edgeAudioFor(state.chunks[state.chunkIndex], state.voice);
+      state.utterance = { edge:true, token, audio };
+      state.paused = false;
+      audio.onended = () => {
+        if (state.utterance?.audio !== audio || token !== state.speakToken) return;
+        if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); }
+        else { state.paragraph = audioExport.recorder ? state.exportEndParagraph : state.paragraph + 1; state.chunkParagraph = -1; speakParagraph(); }
+      };
+      audio.onerror = () => { if (state.utterance?.audio !== audio) return; state.utterance = null; syncControls(); status('Edge TTS không kết nối được'); };
+      syncControls();
+      audio.play().catch(() => { state.utterance = null; syncControls(); status('iOS chặn phát audio. Hãy bấm Tiếp tục để cho phép phát Edge TTS.'); });
+      status(`Đang đọc bằng ${state.voice?.label || 'Edge TTS'}`);
+      return;
+    }
     if (extensionTts) {
       const token = ++state.speakToken;
       state.utterance = { extension:true, token };
@@ -317,13 +356,13 @@
   };
   const speak = () => {
     if (!chapters[state.index]) return;
-    const speech = getSpeech(); if (!extensionTts && !speech) { status('Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 Web Speech TTS'); return; }
+    const speech = getSpeech(); if (!extensionTts && !edgeTtsEnabled && !speech) { status('Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 Web Speech TTS'); return; }
     stop(); state.voice = findVoice(); state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.chunkParagraph = -1; speakParagraph();
   };
-  const stop = () => { if (audioExport.recorder) { audioExport.batch = null; finishAudioExport(false); } state.speakToken += 1; state.requestId = 0; state.utterance = null; state.paused = false; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'stop' }); else getSpeech()?.cancel(); state.paragraph = -1; state.chunkParagraph = -1; syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); };
+  const stop = () => { if (audioExport.recorder) { audioExport.batch = null; finishAudioExport(false); } state.speakToken += 1; state.requestId = 0; state.utterance?.audio?.pause(); state.utterance = null; state.paused = false; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'stop' }); else if (!edgeTtsEnabled) getSpeech()?.cancel(); state.paragraph = -1; state.chunkParagraph = -1; syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); };
   $('playButton').onclick = () => { testingVoice = false; speak(); };
-  $('pauseButton').onclick = () => { if (!state.utterance) return; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'pause' }); else getSpeech()?.pause(); state.paused = true; syncControls(); status('\u0110\u00e3 t\u1ea1m d\u1eebng'); };
-  $('resumeButton').onclick = () => { const speech = getSpeech(); if ((!extensionTts && speech?.paused) || (extensionTts && state.utterance && state.paused)) { if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'resume' }); else speech.resume(); state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); return; } state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.chunkParagraph = -1; speakParagraph(); };
+  $('pauseButton').onclick = () => { if (!state.utterance) return; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'pause' }); else if (edgeTtsEnabled) state.utterance.audio?.pause(); else getSpeech()?.pause(); state.paused = true; syncControls(); status('\u0110\u00e3 t\u1ea1m d\u1eebng'); };
+  $('resumeButton').onclick = () => { const speech = getSpeech(); if (edgeTtsEnabled && state.utterance?.audio) { state.utterance.audio.play().then(() => { state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); }).catch(() => status('H\u00e3y ch\u1ea1m Ti\u1ebfp t\u1ee5c l\u1ea1i')); return; } if ((!extensionTts && !edgeTtsEnabled && speech?.paused) || (extensionTts && state.utterance && state.paused)) { if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'resume' }); else speech.resume(); state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); return; } state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.chunkParagraph = -1; speakParagraph(); };
   $('stopButton').onclick = () => { testingVoice = false; stop(); };
   $('prevButton').onclick = () => select(Math.max(0, state.index - 1)); $('nextButton').onclick = () => select(Math.min(chapters.length - 1, state.index + 1));
   $('rate').value = savedSettings.rate ?? 1; $('rateValue').textContent = `${Number($('rate').value).toFixed(2)}\u00d7`;
@@ -347,6 +386,14 @@
         if (response?.ok === false) status(response?.error || 'Không phát được voice Chrome OS');
         else status(`Đang thử bằng ${response.voice || 'voice tiếng Việt'}`);
       });
+      return;
+    }
+    if (edgeTtsEnabled) {
+      const audio = edgeAudioFor(sample, selected);
+      audio.onended = () => { testingVoice = false; status('Đã thử xong Edge TTS'); };
+      audio.onerror = () => { testingVoice = false; status('Edge TTS không kết nối được'); };
+      audio.play().catch(() => status('Hãy chạm nút thử giọng lại để cho phép phát audio'));
+      status(`Đang thử bằng ${selected?.label || 'Edge TTS'}`);
       return;
     }
     const speech = getSpeech();
@@ -375,8 +422,8 @@
     if (event.key === 'ArrowLeft') $('prevButton').click();
     if (event.key === 'ArrowRight') $('nextButton').click();
   });
-  $('voiceButton').onclick = async () => { await loadVoices(); const names = state.voices.map(v => v.voiceName || v.name || v.lang); const voice2 = state.voices.find(isVoice2); status(voice2 ? `\u0110\u00e3 t\u00ecm th\u1ea5y: ${voice2.voiceName || voice2.name}` : names.length ? `Kh\u00f4ng c\u00f3 Vietnamese 2. Voice hi\u1ec7n c\u00f3: ${names.join(', ')}` : 'Kh\u00f4ng t\u00ecm th\u1ea5y voice Vi\u1ec7t'); };
-  if (!extensionTts && getSpeech()) getSpeech().onvoiceschanged = () => void loadVoices();
+  $('voiceButton').onclick = async () => { await loadVoices(); if (edgeTtsEnabled) { status(`Edge TTS: ${state.voices.map(v => v.label).join(', ')}`); return; } const names = state.voices.map(v => v.voiceName || v.name || v.lang); const voice2 = state.voices.find(isVoice2); status(voice2 ? `\u0110\u00e3 t\u00ecm th\u1ea5y: ${voice2.voiceName || voice2.name}` : names.length ? `Kh\u00f4ng c\u00f3 Vietnamese 2. Voice hi\u1ec7n c\u00f3: ${names.join(', ')}` : 'Kh\u00f4ng t\u00ecm th\u1ea5y voice Vi\u1ec7t'); };
+  if (!extensionTts && !edgeTtsEnabled && getSpeech()) getSpeech().onvoiceschanged = () => void loadVoices();
   const handleReadingEvent = message => { if (message.type !== 'TTS_EVENT' || !state.utterance || state.paragraph < 0 || (state.requestId && message.requestId !== state.requestId)) return; if (message.event.type === 'word' || message.event.type === 'sentence') markReading(state.paragraph); if (message.event.type === 'end') { if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); } else { state.paragraph = audioExport.recorder ? state.exportEndParagraph : state.paragraph + 1; state.chunkParagraph = -1; speakParagraph(); } } if (message.event.type === 'error') { state.utterance = null; state.paused = false; syncControls(); status(message.event.errorMessage || 'TTS l\u1ed7i'); } };
   if (directExtensionTts) chrome.runtime.onMessage.addListener(handleReadingEvent);
   if (!directExtensionTts) window.addEventListener('message', event => { if (event.data?.source === 'viet-docx-tts-web' && event.data?.event) handleReadingEvent(event.data.event); });

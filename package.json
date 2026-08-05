@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@andresaya/edge-tts": "^1.8.0"
+  }
+}

@@ -1,5 +1,13 @@
 server.mjs
 build.ps1
 README.txt
+PANEL-HOSTING.md
+chapters
+viet-docx-tts-reader-panel.zip
+chromeos-tts-bridge.zip
+manifest.json
+tts-background.js
+tts-bridge-manifest.json
+tts-bridge.js
 .git
 .vercel

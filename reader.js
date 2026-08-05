@@ -386,7 +386,23 @@
       };
       audio.onerror = () => { if (state.utterance?.audio !== audio) return; state.edgeFailed = true; state.paused = true; syncControls(); status('Edge TTS tạm lỗi. Bấm Tiếp tục để thử lại đoạn này.'); };
       syncControls();
-      audio.play().catch(() => { state.edgeFailed = true; state.paused = true; syncControls(); status('iOS chặn phát audio. Bấm Tiếp tục để cho phép phát Edge TTS.'); });
+      let playbackStarted = false;
+      const startWhenReady = () => {
+        if (playbackStarted || state.utterance?.audio !== audio) return;
+        edgeAudioContext?.resume().catch(() => {});
+        audio.play().then(() => {
+          playbackStarted = true;
+          audio.removeEventListener('canplay', startWhenReady);
+          state.edgeFailed = false;
+          state.paused = false;
+          syncControls();
+        }).catch(error => {
+          if (error?.name === 'NotAllowedError') { state.edgeFailed = true; state.paused = true; syncControls(); status('iOS chặn phát audio. Bấm Tiếp tục để cho phép Edge TTS.'); }
+        });
+      };
+      audio.addEventListener('canplay', startWhenReady);
+      if (audio.readyState === 0) audio.load();
+      startWhenReady();
       status(`Đang đọc bằng ${voiceLabel(state.voice)}`);
       return;
     }

@@ -1,1 +1,1 @@
-window.READER_CONFIG = { title: 'DOCX Reader', sourceName: '', storageKey: 'docx-reader' };
+﻿window.READER_CONFIG = {"title":"Vol9_VI","sourceName":"Vol9_VI.docx","storageKey":"vol9-vi"};

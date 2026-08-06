@@ -541,24 +541,26 @@
     }
     if (edgeTtsEnabled) {
       const token = ++state.speakToken;
+      const paragraph = state.paragraph;
+      const chunkIndex = state.chunkIndex;
       const audio = takeEdgeAudio(state.chunks[state.chunkIndex], state.voice);
-      state.utterance = { edge:true, token, audio };
+      state.utterance = { edge:true, token, audio, paragraph, chunkIndex };
       state.paused = false;
       const nextText = state.chunks[state.chunkIndex + 1];
       const nextParagraphText = chapter.paragraphs[state.paragraph + 1];
       if (nextText) prepareEdgeAudio(nextText, state.voice);
       else if (nextParagraphText) prepareEdgeAudio(nextParagraphText, state.voice);
       audio.onended = () => {
-        if (state.utterance?.audio !== audio || token !== state.speakToken) return;
+        if (state.utterance?.audio !== audio || state.utterance?.paragraph !== paragraph || state.utterance?.chunkIndex !== chunkIndex || state.paragraph !== paragraph || state.chunkIndex !== chunkIndex || token !== state.speakToken) return;
         audio.edgeSource?.disconnect();
         if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); }
         else { state.paragraph = audioExport.recorder ? state.exportEndParagraph : state.paragraph + 1; state.chunkParagraph = -1; speakParagraph(); }
       };
-      audio.onerror = () => { if (state.utterance?.audio !== audio) return; state.edgeFailed = true; state.paused = true; syncControls(); status('Edge TTS tạm lỗi. Bấm Tiếp tục để thử lại đoạn này.'); };
+      audio.onerror = () => { if (state.utterance?.audio !== audio || state.utterance?.paragraph !== paragraph || state.utterance?.chunkIndex !== chunkIndex) return; state.edgeFailed = true; state.paused = true; syncControls(); status('Edge TTS tạm lỗi. Bấm Tiếp tục để thử lại đoạn này.'); };
       syncControls();
       let playbackStarted = false;
       const startWhenReady = () => {
-        if (playbackStarted || state.utterance?.audio !== audio) return;
+        if (playbackStarted || state.utterance?.audio !== audio || state.utterance?.paragraph !== paragraph || state.utterance?.chunkIndex !== chunkIndex) return;
         skipEdgeLeadSilence(audio);
         edgeAudioContext?.resume().catch(() => {});
         audio.play().then(() => {
@@ -650,7 +652,7 @@
   });
   $('playButton').onclick = () => { testingVoice = false; speak(); };
   $('pauseButton').onclick = () => { if (!state.utterance) return; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'pause' }); else if (edgeTtsEnabled) { flushEdgeChapterProgress(); state.utterance.audio?.pause(); } else getSpeech()?.pause(); state.paused = true; syncControls(); status('\u0110\u00e3 t\u1ea1m d\u1eebng'); };
-  $('resumeButton').onclick = () => { const speech = getSpeech(); claimPlayback(); if (edgeTtsEnabled && state.edgeFailed) { const resumeParagraph = Math.max(state.paragraph, state.resumeParagraph, progressFor(state.index), 0); state.utterance?.audio?.pause(); state.utterance?.audio?.removeAttribute('src'); state.utterance?.audio?.load(); state.utterance?.audio?.edgeSource?.disconnect(); state.edgeFailed = false; state.utterance = null; state.paused = false; state.speakToken += 1; state.paragraph = resumeParagraph; state.chunkParagraph = -1; speakParagraph(); return; } if (edgeTtsEnabled && state.utterance?.audio) { edgeAudioContext?.resume().catch(() => {}); state.utterance.audio.play().then(() => { state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); }).catch(() => { state.edgeFailed = true; state.paused = true; syncControls(); status('Edge TTS ch\u01b0a s\u1eb5n s\u00e0ng. H\u00e3y b\u1ea5m Ti\u1ebfp t\u1ee5c l\u1ea1i.'); }); return; } if ((!extensionTts && !edgeTtsEnabled && speech?.paused) || (extensionTts && state.utterance && state.paused)) { if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'resume' }); else speech.resume(); state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); return; } state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.chunkParagraph = -1; speakParagraph(); };
+  $('resumeButton').onclick = () => { const speech = getSpeech(); claimPlayback(); if (edgeTtsEnabled && state.edgeFailed) { const resumeParagraph = Math.max(state.paragraph, state.maxParagraph, state.resumeParagraph, progressFor(state.index), 0); state.utterance?.audio?.pause(); state.utterance?.audio?.removeAttribute('src'); state.utterance?.audio?.load(); state.utterance?.audio?.edgeSource?.disconnect(); state.edgeFailed = false; state.utterance = null; state.paused = false; state.speakToken += 1; state.paragraph = resumeParagraph; state.maxParagraph = Math.max(state.maxParagraph, resumeParagraph); state.chunkParagraph = -1; speakParagraph(); return; } if (edgeTtsEnabled && state.utterance?.audio) { edgeAudioContext?.resume().catch(() => {}); state.utterance.audio.play().then(() => { state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); }).catch(() => { state.edgeFailed = true; state.paused = true; syncControls(); status('Edge TTS ch\u01b0a s\u1eb5n s\u00e0ng. H\u00e3y b\u1ea5m Ti\u1ebfp t\u1ee5c l\u1ea1i.'); }); return; } if ((!extensionTts && !edgeTtsEnabled && speech?.paused) || (extensionTts && state.utterance && state.paused)) { if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'resume' }); else speech.resume(); state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); return; } const savedParagraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.paragraph = Math.max(state.paragraph, state.maxParagraph, savedParagraph, progressFor(state.index), 0); state.maxParagraph = Math.max(state.maxParagraph, state.paragraph); state.chunkParagraph = -1; speakParagraph(); };
   $('stopButton').onclick = () => { testingVoice = false; stop(); };
   $('prevButton').onclick = () => select(Math.max(0, state.index - 1)); $('nextButton').onclick = () => select(Math.min(chapters.length - 1, state.index + 1));
   $('rate').value = savedSettings.rate ?? 1; $('rateValue').textContent = `${Number($('rate').value).toFixed(2)}\u00d7`;

@@ -72,14 +72,22 @@
       } catch (error) { callback({ ok:false, error:error.message }); return; }
     }
     const id = ++bridgeRequestId;
+    let settled = false;
+    let timeout = 0;
+    const finish = response => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('message', handler);
+      clearTimeout(timeout);
+      callback(response);
+    };
     const handler = event => {
       if (event.source !== window || event.data?.source !== 'viet-docx-tts-web' || event.data?.direction !== 'from-extension' || event.data?.id !== id) return;
-      window.removeEventListener('message', handler);
-      callback(event.data.response);
+      finish(event.data.response);
     };
     window.addEventListener('message', handler);
     window.postMessage({ source:'viet-docx-tts-web', direction:'to-extension', id, message }, '*');
-    setTimeout(() => { window.removeEventListener('message', handler); callback({ ok:false, error:'Chưa cài cầu nối ChromeOS TTS' }); }, 5000);
+    timeout = setTimeout(() => finish({ ok:false, error:'Chưa cài cầu nối ChromeOS TTS' }), 5000);
   };
   let testingVoice = false;
   let resetConfirmTimer = 0;
@@ -120,9 +128,10 @@
   const voiceLabel = voice => voice?.label || voice?.voiceName || voice?.name || voice?.lang || 'voice tiếng Việt';
   const fontName = name => ({ Montserrat:'Montserrat Local', QuattrocentoSans:'Quattrocento Local', Arial:'Arial', 'Arial Unicode MS':'Arial Unicode MS', Cambria:'Cambria', Georgia:'Georgia', 'Liberation Serif':'Liberation Serif' }[name] || 'Montserrat Local');
   const renderRuns = block => block.runs?.length ? block.runs.map(run => `<span style="font-family:'${fontName(run.font)}';${run.bold ? 'font-weight:700;' : ''}${run.italic ? 'font-style:italic;' : ''}">${escapeHtml(run.text)}</span>`).join('') : escapeHtml(block.text);
+  const normalizeSpeechText = text => String(text || '').replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '').replace(/\s+/g, ' ').trim();
   const splitForSpeechSafe = (text, maxLength = 900) => {
     const parts = [];
-    let rest = text.replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '').replace(/\s+/g, ' ').trim();
+    let rest = normalizeSpeechText(text);
     const minimumCut = Math.floor(maxLength * 0.45);
     while (rest.length > maxLength) {
       let cut = -1;
@@ -358,7 +367,7 @@
     return audio;
   };
   const takeEdgeAudio = (text, voice) => {
-    const key = `${voice?.voiceName || ''}|${state.pitch}|${text}`;
+    const key = `${voice?.voiceName || ''}|${state.pitch}|${normalizeSpeechText(text)}`;
     if (edgePrefetch?.key === key) {
       const ready = edgePrefetch.audio;
       edgePrefetch = null;
@@ -368,7 +377,7 @@
     return edgeAudioFor(text, voice);
   };
   const prepareEdgeAudio = (text, voice) => {
-    const key = `${voice?.voiceName || ''}|${state.pitch}|${text}`;
+    const key = `${voice?.voiceName || ''}|${state.pitch}|${normalizeSpeechText(text)}`;
     if (edgePrefetch?.key === key) {
       applyEdgeAudioControls(edgePrefetch.audio);
       const ready = edgePrefetch.audio;
@@ -578,7 +587,8 @@
       sendTtsMessage({ type:'TTS_SPEAK', text:state.chunks[state.chunkIndex], voiceName:state.voice?.voiceName, rate:Number($('rate').value), pitch:state.pitch, volume:state.volume }, response => {
         if (token !== state.speakToken) return;
         if (response?.ok === false) { status(response?.error || 'Kh\u00f4ng ph\u00e1t \u0111\u01b0\u1ee3c voice Chrome OS'); state.utterance = null; syncControls(); }
-        else { state.requestId = response.requestId || 0; status(`\u0110ang \u0111\u1ecdc b\u1eb1ng ${response.voice || 'Chrome OS Vietnamese 2'}`); }
+        else if (!response?.requestId) { state.utterance = null; syncControls(); status('Cầu nối ChromeOS không trả về mã phát TTS. Hãy tải lại extension.'); }
+        else { state.requestId = response.requestId; status(`\u0110ang \u0111\u1ecdc b\u1eb1ng ${response.voice || 'Chrome OS Vietnamese 2'}`); }
       });
       return;
     }
@@ -661,7 +671,7 @@
     stop();
     if (extensionTts) {
       sendTtsMessage({ type:'TTS_SPEAK', text:sample, voiceName:selected?.voiceName, rate:Number($('rate').value), pitch:state.pitch, volume:state.volume }, response => {
-        if (response?.ok === false) status(response?.error || 'Không phát được voice Chrome OS');
+        if (response?.ok === false || !response?.requestId) status(response?.error || 'Cầu nối ChromeOS không trả về mã phát TTS');
         else status(`Đang thử bằng ${response.voice || 'voice tiếng Việt'}`);
       });
       return;

@@ -78,13 +78,16 @@
   let edgeAudioContext = null;
   let edgePrefetch = null;
   const retiredEdgeAudios = new WeakSet();
-  const retireEdgeAudio = audio => {
+  let edgeAudioSequence = 0;
+  const retireEdgeAudio = (audio, clearSource = true) => {
     if (!audio || retiredEdgeAudios.has(audio)) return;
     retiredEdgeAudios.add(audio);
     audio.onended = null;
     audio.onerror = null;
     try { audio.pause(); } catch { /* Audio đã bị Safari giải phóng. */ }
-    try { audio.removeAttribute('src'); audio.load(); } catch { /* Bỏ qua nếu audio đã kết thúc. */ }
+    if (clearSource) {
+      try { audio.removeAttribute('src'); audio.load(); } catch { /* Bỏ qua nếu audio đã kết thúc. */ }
+    }
     try { audio.edgeSource?.disconnect(); } catch { /* AudioContext đã bị đóng. */ }
   };
   let bridgeRequestId = 0;
@@ -377,6 +380,7 @@
     // Không cho trình duyệt iOS tái sử dụng response media của đoạn trước.
     url.searchParams.set('playback', `${tabId}-${state.speakToken}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     const audio = new Audio(url.href);
+    audio.dataset.readerAudioId = String(++edgeAudioSequence);
     audio.preload = 'auto';
     audio.playsInline = true;
     audio.setAttribute('playsinline', '');
@@ -605,13 +609,25 @@
         if (nextText) prepareEdgeAudio(nextText, state.voice);
         else if (nextParagraphText) prepareEdgeAudio(nextParagraphText, state.voice);
       }
+      let completed = false;
       audio.onended = () => {
         if (retiredEdgeAudios.has(audio)) return;
         if (state.utterance?.audio !== audio || state.utterance?.paragraph !== paragraph || state.utterance?.chunkIndex !== chunkIndex || state.paragraph !== paragraph || state.chunkIndex !== chunkIndex || token !== state.speakToken) {
           retireEdgeAudio(audio);
           return;
         }
-        retireEdgeAudio(audio);
+        // Orion/WebKit đôi lúc phát `ended` sớm khi nguồn còn đang đệm hoặc
+        // vừa bị gián đoạn. Không được coi đó là hết đoạn, nếu không bộ đọc
+        // sẽ nhảy sai và callback cũ có thể làm quay về đoạn trước.
+        if (completed || !audio.ended || (Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime + 0.2 < audio.duration)) return;
+        completed = true;
+        // Giữ media element ở trạng thái ended trong lúc mở đoạn mới. Xoá
+        // src ngay bên trong `ended` có thể kích hoạt lỗi chuyển nguồn nền
+        // của iOS; dọn nó sau khi transition đã được chấp nhận.
+        retireEdgeAudio(audio, false);
+        setTimeout(() => {
+          try { audio.removeAttribute('src'); audio.load(); } catch { /* Media đã được WebKit giải phóng. */ }
+        }, 0);
         if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); }
         else { advanceParagraph(audioExport.recorder ? state.exportEndParagraph : state.paragraph + 1); }
       };

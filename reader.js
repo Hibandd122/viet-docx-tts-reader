@@ -13,13 +13,20 @@
   const savedProgress = (() => { try { return JSON.parse(localStorage.getItem(progressStorageKey) || '{}'); } catch { return {}; } })();
   const savedSettings = (() => { try { return JSON.parse(localStorage.getItem(settingsStorageKey) || '{}'); } catch { return {}; } })();
   const chapterProgress = { ...(savedProgress.chapters || {}) };
-  const progressFor = index => Math.max(0, Number(chapterProgress[index] ?? (Number(savedProgress.chapter) === index ? savedProgress.paragraph : 0)) || 0);
+  const progressFor = index => Math.max(
+    0,
+    Number(chapterProgress[index]) || 0,
+    Number(savedProgress.chapter) === index ? Number(savedProgress.paragraph) || 0 : 0
+  );
   const saveProgress = (chapter, paragraph, allowRewind = false) => {
     const requested = Math.max(0, Number(paragraph) || 0);
     let stored = 0;
     try {
       const latest = JSON.parse(localStorage.getItem(progressStorageKey) || '{}');
-      stored = Number(latest.chapters?.[chapter] ?? (Number(latest.chapter) === chapter ? latest.paragraph : 0)) || 0;
+      stored = Math.max(
+        Number(latest.chapters?.[chapter]) || 0,
+        Number(latest.chapter) === chapter ? Number(latest.paragraph) || 0 : 0
+      );
     } catch { /* Dùng bản tiến độ trong bộ nhớ nếu localStorage tạm thời lỗi. */ }
     const current = Math.max(0, Number(chapterProgress[chapter]) || 0, stored);
     chapterProgress[chapter] = allowRewind ? requested : Math.max(current, requested);
@@ -34,6 +41,9 @@
       Object.entries(incoming.chapters || {}).forEach(([chapter, paragraph]) => {
         chapterProgress[chapter] = Math.max(Number(chapterProgress[chapter]) || 0, Number(paragraph) || 0);
       });
+      if (Number(incoming.chapter) === state.index) {
+        chapterProgress[state.index] = Math.max(Number(chapterProgress[state.index]) || 0, Number(incoming.paragraph) || 0);
+      }
       if (!state.utterance && Number(incoming.chapter) === state.index) {
         state.resumeChapter = state.index;
         state.resumeParagraph = progressFor(state.index);

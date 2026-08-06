@@ -5,6 +5,8 @@
   const storageKey = String(readerConfig.storageKey || readerTitle).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'docx-reader';
   const progressStorageKey = `docx-reader:${storageKey}:progress`;
   const settingsStorageKey = `docx-reader:${storageKey}:settings`;
+  const playbackStorageKey = `docx-reader:${storageKey}:active-playback`;
+  const tabId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   const $ = id => document.getElementById(id);
   document.title = `${readerTitle} · Trình đọc tiếng Việt`;
   document.querySelector('h1')?.replaceChildren(`${readerTitle} · Tiếng Việt`);
@@ -578,12 +580,54 @@
   const speak = () => {
     if (!chapters[state.index]) return;
     const speech = getSpeech(); if (!extensionTts && !edgeTtsEnabled && !speech) { status('Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 Web Speech TTS'); return; }
-    stop(); state.voice = findVoice(); state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.chunkParagraph = -1; speakParagraph();
+    stop(); claimPlayback(); state.voice = findVoice(); state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.chunkParagraph = -1; speakParagraph();
   };
-  const stop = () => { if (audioExport.recorder) { audioExport.batch = null; finishAudioExport(false); } state.speakToken += 1; state.requestId = 0; state.utterance?.audio?.pause(); state.utterance?.audio?.removeAttribute('src'); state.utterance?.audio?.load(); state.utterance?.audio?.edgeSource?.disconnect(); edgePrefetch?.audio?.pause(); edgePrefetch?.audio?.edgeSource?.disconnect(); edgePrefetch = null; state.utterance = null; state.paused = false; state.edgeFailed = false; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'stop' }); else if (!edgeTtsEnabled) getSpeech()?.cancel(); state.paragraph = -1; state.chunkParagraph = -1; syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); };
+  const stop = () => { if (audioExport.recorder) { audioExport.batch = null; finishAudioExport(false); } state.speakToken += 1; state.requestId = 0; state.utterance?.audio?.pause(); state.utterance?.audio?.removeAttribute('src'); state.utterance?.audio?.load(); state.utterance?.audio?.edgeSource?.disconnect(); edgePrefetch?.audio?.pause(); edgePrefetch?.audio?.edgeSource?.disconnect(); edgePrefetch = null; state.utterance = null; state.paused = false; state.edgeFailed = false; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'stop' }); else if (!edgeTtsEnabled) getSpeech()?.cancel(); state.paragraph = -1; state.chunkParagraph = -1; releasePlaybackOwner(); syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); };
+  const releasePlaybackOwner = () => {
+    try {
+      const owner = JSON.parse(localStorage.getItem(playbackStorageKey) || 'null');
+      if (owner?.tabId === tabId) localStorage.removeItem(playbackStorageKey);
+    } catch { /* B\u1ecf qua n\u1ebfu localStorage t\u1ea1m th\u1eddi kh\u00f4ng s\u1eb5n s\u00e0ng. */ }
+  };
+  const claimPlayback = () => {
+    const owner = { tabId, at: Date.now() };
+    try { localStorage.setItem(playbackStorageKey, JSON.stringify(owner)); } catch { /* Storage b\u1ecb ch\u1eb7n kh\u00f4ng ch\u1eb7n ph\u00e1t. */ }
+    try { playbackChannel?.postMessage({ type:'claim', ...owner }); } catch { /* BroadcastChannel kh\u00f4ng c\u00f3, storage event v\u1eabn l\u00e0 fallback. */ }
+  };
+  const stopForOtherTab = () => {
+    if (!state.utterance) return;
+    state.speakToken += 1;
+    state.requestId = 0;
+    state.utterance.audio?.pause();
+    state.utterance.audio?.removeAttribute('src');
+    state.utterance.audio?.load();
+    state.utterance.audio?.edgeSource?.disconnect();
+    edgePrefetch?.audio?.pause();
+    edgePrefetch?.audio?.edgeSource?.disconnect();
+    edgePrefetch = null;
+    state.utterance = null;
+    state.paused = false;
+    state.edgeFailed = false;
+    if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'stop' });
+    else if (!edgeTtsEnabled) getSpeech()?.cancel();
+    state.paragraph = -1;
+    state.chunkParagraph = -1;
+    syncControls();
+    nowReading('\u0110\u00e3 d\u1eebng v\u00ec tab kh\u00e1c \u0111ang ph\u00e1t');
+    status('\u0110\u00e3 d\u1eebng tab n\u00e0y: ch\u1ec9 gi\u1eef m\u1ed9t phi\u00ean TTS \u0111ang ph\u00e1t');
+  };
+  let playbackChannel = null;
+  try {
+    playbackChannel = new BroadcastChannel(playbackStorageKey);
+    playbackChannel.addEventListener('message', event => { if (event.data?.type === 'claim' && event.data.tabId !== tabId) stopForOtherTab(); });
+  } catch { /* Tr\u00ecnh duy\u1ec7t c\u0169 kh\u00f4ng h\u1ed7 tr\u1ee3 BroadcastChannel. */ }
+  window.addEventListener('storage', event => {
+    if (event.key !== playbackStorageKey || !event.newValue) return;
+    try { const owner = JSON.parse(event.newValue); if (owner?.tabId && owner.tabId !== tabId) stopForOtherTab(); } catch { /* B\u1ecf qua owner h\u1ecfng. */ }
+  });
   $('playButton').onclick = () => { testingVoice = false; speak(); };
   $('pauseButton').onclick = () => { if (!state.utterance) return; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'pause' }); else if (edgeTtsEnabled) { flushEdgeChapterProgress(); state.utterance.audio?.pause(); } else getSpeech()?.pause(); state.paused = true; syncControls(); status('\u0110\u00e3 t\u1ea1m d\u1eebng'); };
-  $('resumeButton').onclick = () => { const speech = getSpeech(); if (edgeTtsEnabled && state.edgeFailed) { state.edgeFailed = false; state.utterance = null; state.paused = false; state.speakToken += 1; speakParagraph(); return; } if (edgeTtsEnabled && state.utterance?.audio) { edgeAudioContext?.resume().catch(() => {}); state.utterance.audio.play().then(() => { state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); }).catch(() => { state.edgeFailed = true; state.paused = true; syncControls(); status('Edge TTS ch\u01b0a s\u1eb5n s\u00e0ng. H\u00e3y b\u1ea5m Ti\u1ebfp t\u1ee5c l\u1ea1i.'); }); return; } if ((!extensionTts && !edgeTtsEnabled && speech?.paused) || (extensionTts && state.utterance && state.paused)) { if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'resume' }); else speech.resume(); state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); return; } state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.chunkParagraph = -1; speakParagraph(); };
+  $('resumeButton').onclick = () => { const speech = getSpeech(); claimPlayback(); if (edgeTtsEnabled && state.edgeFailed) { const resumeParagraph = Math.max(state.paragraph, state.resumeParagraph, progressFor(state.index), 0); state.utterance?.audio?.pause(); state.utterance?.audio?.removeAttribute('src'); state.utterance?.audio?.load(); state.utterance?.audio?.edgeSource?.disconnect(); state.edgeFailed = false; state.utterance = null; state.paused = false; state.speakToken += 1; state.paragraph = resumeParagraph; state.chunkParagraph = -1; speakParagraph(); return; } if (edgeTtsEnabled && state.utterance?.audio) { edgeAudioContext?.resume().catch(() => {}); state.utterance.audio.play().then(() => { state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); }).catch(() => { state.edgeFailed = true; state.paused = true; syncControls(); status('Edge TTS ch\u01b0a s\u1eb5n s\u00e0ng. H\u00e3y b\u1ea5m Ti\u1ebfp t\u1ee5c l\u1ea1i.'); }); return; } if ((!extensionTts && !edgeTtsEnabled && speech?.paused) || (extensionTts && state.utterance && state.paused)) { if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'resume' }); else speech.resume(); state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); return; } state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.chunkParagraph = -1; speakParagraph(); };
   $('stopButton').onclick = () => { testingVoice = false; stop(); };
   $('prevButton').onclick = () => select(Math.max(0, state.index - 1)); $('nextButton').onclick = () => select(Math.min(chapters.length - 1, state.index + 1));
   $('rate').value = savedSettings.rate ?? 1; $('rateValue').textContent = `${Number($('rate').value).toFixed(2)}\u00d7`;

@@ -374,6 +374,8 @@
     url.searchParams.set('rate', '+0%');
     url.searchParams.set('pitch', `${pitch >= 0 ? '+' : ''}${pitch}Hz`);
     url.searchParams.set('volume', '100%');
+    // Không cho trình duyệt iOS tái sử dụng response media của đoạn trước.
+    url.searchParams.set('playback', `${tabId}-${state.speakToken}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     const audio = new Audio(url.href);
     audio.preload = 'auto';
     audio.playsInline = true;

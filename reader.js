@@ -580,6 +580,7 @@
       }
       audio.onended = () => {
         if (state.utterance?.audio !== audio || state.utterance?.paragraph !== paragraph || state.utterance?.chunkIndex !== chunkIndex || state.paragraph !== paragraph || state.chunkIndex !== chunkIndex || token !== state.speakToken) return;
+        audio.onended = null;
         audio.edgeSource?.disconnect();
         if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); }
         else { advanceParagraph(audioExport.recorder ? state.exportEndParagraph : state.paragraph + 1); }

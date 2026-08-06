@@ -371,9 +371,13 @@
     url.searchParams.set('volume', '100%');
     const audio = new Audio(url.href);
     audio.preload = 'auto';
+    audio.playsInline = true;
+    audio.setAttribute('playsinline', '');
     audio.volume = state.volume;
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (AudioContextClass) {
+    // Tránh createMediaElementSource trên iOS: WebKit có các lỗi đã biết khi
+    // nối HTMLAudioElement vào AudioContext, có thể làm sự kiện media lệch.
+    if (AudioContextClass && !appleMobile) {
       try {
         edgeAudioContext ||= new AudioContextClass();
         const source = edgeAudioContext.createMediaElementSource(audio);

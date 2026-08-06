@@ -1,4 +1,4 @@
-const CACHE_NAME = 'docx-reader-v8';
+const CACHE_NAME = 'docx-reader-v9';
 const SHELL = ['./', './index.html', './styles.css', './reader-config.js', './reader.js', './chapters.js', './manifest.webmanifest'];
 
 self.addEventListener('install', event => {

@@ -12,9 +12,34 @@
   const savedSettings = (() => { try { return JSON.parse(localStorage.getItem(settingsStorageKey) || '{}'); } catch { return {}; } })();
   const chapterProgress = { ...(savedProgress.chapters || {}) };
   const progressFor = index => Math.max(0, Number(chapterProgress[index] ?? (Number(savedProgress.chapter) === index ? savedProgress.paragraph : 0)) || 0);
-  const saveProgress = (chapter, paragraph) => { chapterProgress[chapter] = Math.max(0, Number(paragraph) || 0); localStorage.setItem(progressStorageKey, JSON.stringify({ chapter, paragraph:chapterProgress[chapter], chapters:chapterProgress })); };
+  const saveProgress = (chapter, paragraph, allowRewind = false) => {
+    const requested = Math.max(0, Number(paragraph) || 0);
+    let stored = 0;
+    try {
+      const latest = JSON.parse(localStorage.getItem(progressStorageKey) || '{}');
+      stored = Number(latest.chapters?.[chapter] ?? (Number(latest.chapter) === chapter ? latest.paragraph : 0)) || 0;
+    } catch { /* Dùng bản tiến độ trong bộ nhớ nếu localStorage tạm thời lỗi. */ }
+    const current = Math.max(0, Number(chapterProgress[chapter]) || 0, stored);
+    chapterProgress[chapter] = allowRewind ? requested : Math.max(current, requested);
+    localStorage.setItem(progressStorageKey, JSON.stringify({ chapter, paragraph:chapterProgress[chapter], chapters:chapterProgress }));
+  };
   const settings = { ...savedSettings };
   const state = { index: 0, utterance: null, paused: false, edgeFailed: false, speakToken: 0, requestId: 0, voice: null, voices: [], paragraph: -1, chunkIndex: 0, chunkParagraph: -1, chunks: [], volume: Number(savedSettings.volume ?? 1), pitch: Number(savedSettings.pitch ?? 1), autoScroll: savedSettings.autoScroll !== false, autoNext: savedSettings.autoNext === true, resumeChapter: Number(savedProgress.chapter) || 0, resumeParagraph: progressFor(Number(savedProgress.chapter) || 0) };
+  window.addEventListener('storage', event => {
+    if (event.key !== progressStorageKey || !event.newValue) return;
+    try {
+      const incoming = JSON.parse(event.newValue);
+      Object.entries(incoming.chapters || {}).forEach(([chapter, paragraph]) => {
+        chapterProgress[chapter] = Math.max(Number(chapterProgress[chapter]) || 0, Number(paragraph) || 0);
+      });
+      if (!state.utterance && Number(incoming.chapter) === state.index) {
+        state.resumeChapter = state.index;
+        state.resumeParagraph = progressFor(state.index);
+        updateListProgress(state.index);
+        nowReading(`Sẵn sàng tiếp tục từ đoạn ${state.resumeParagraph + 1}/${chapters[state.index]?.paragraphs?.length || 0}`);
+      }
+    } catch { /* Bỏ qua dữ liệu tiến độ hỏng từ tab khác. */ }
+  });
   const directExtensionTts = typeof chrome !== 'undefined' && !!chrome.runtime?.id;
   const bridgeExtensionId = 'eflagfifekpkhoiaeciaobdaiabpppbd';
   const webExtensionMessaging = !directExtensionTts && typeof chrome !== 'undefined' && typeof chrome.runtime?.sendMessage === 'function';
@@ -114,7 +139,7 @@
     const small = button?.querySelector('[data-progress]');
     if (small) small.textContent = `Phần ${index + 1} · ${progress}`;
   };
-  const markReading = index => {
+  const markReading = (index, allowRewind = false) => {
     if (state.utterance?.edgeChapter && index < state.paragraph) return;
     document.querySelectorAll('.content p.reading-now, .content p.resume-point').forEach(p => p.classList.remove('reading-now', 'resume-point'));
     const paragraph = $('paragraph-' + index);
@@ -122,7 +147,7 @@
     if (state.autoScroll) paragraph?.scrollIntoView({ block:'center', behavior:'smooth' });
     updateProgress(index, chapters[state.index]?.paragraphs.length || 0);
     state.resumeChapter = state.index; state.resumeParagraph = index;
-    saveProgress(state.index, index);
+    saveProgress(state.index, index, allowRewind);
     updateListProgress(state.index);
   };
   const isVoice2 = v => /chrome\s*os\s*(?:vietnamese|ti\u1ebfng\s*vi\u1ec7t)\s*2/i.test(`${v.name || ''} ${v.voiceName || ''}`);
@@ -285,7 +310,7 @@
       if (pendingImages.length) Promise.all(pendingImages.map(image => new Promise(resolve => { const done = () => resolve(); image.addEventListener('load', done, { once:true }); image.addEventListener('error', done, { once:true }); }))).then(restoreScroll);
       else restoreScroll();
     }
-    $('content').onclick = event => { const paragraph = event.target.closest('p[id^="paragraph-"]'); if (!paragraph) return; const selected = Number(paragraph.id.slice(10)); stop(); state.resumeChapter = state.index; state.resumeParagraph = selected; saveProgress(state.index, selected); markReading(selected); nowReading(`\u0110\u00e3 ch\u1ecdn \u0111o\u1ea1n ${selected + 1}/${chapter.paragraphs.length}`); status(`S\u1eb5n s\u00e0ng ti\u1ebfp t\u1ee5c t\u1eeb \u0111o\u1ea1n ${selected + 1}`); };
+    $('content').onclick = event => { const paragraph = event.target.closest('p[id^="paragraph-"]'); if (!paragraph) return; const selected = Number(paragraph.id.slice(10)); stop(); state.resumeChapter = state.index; state.resumeParagraph = selected; saveProgress(state.index, selected, true); markReading(selected, true); nowReading(`\u0110\u00e3 ch\u1ecdn \u0111o\u1ea1n ${selected + 1}/${chapter.paragraphs.length}`); status(`S\u1eb5n s\u00e0ng ti\u1ebfp t\u1ee5c t\u1eeb \u0111o\u1ea1n ${selected + 1}`); };
     document.querySelectorAll('.chapter-link').forEach((b, i) => { const active = i === index; b.classList.toggle('active', active); b.setAttribute('aria-current', active ? 'page' : 'false'); });
     status(`${chapter.paragraphs.length} \u0111o\u1ea1n \u00b7 s\u1eb5n s\u00e0ng \u0111\u1ecdc`);
     if (savedParagraph > 0) nowReading(`S\u1eb5n s\u00e0ng ti\u1ebfp t\u1ee5c t\u1eeb \u0111o\u1ea1n ${savedParagraph + 1}/${chapter.paragraphs.length}`);

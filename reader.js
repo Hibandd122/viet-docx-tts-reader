@@ -457,8 +457,12 @@
     updateEdgeChapterProgress(audio);
     saveProgress(state.index, state.paragraph);
   };
-  document.addEventListener('visibilitychange', () => { if (document.hidden) flushEdgeChapterProgress(); });
-  window.addEventListener('pagehide', flushEdgeChapterProgress);
+  const saveCurrentProgress = () => {
+    if (state.utterance && state.paragraph >= 0) saveProgress(state.index, state.paragraph);
+    flushEdgeChapterProgress();
+  };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) saveCurrentProgress(); });
+  window.addEventListener('pagehide', saveCurrentProgress);
   const advanceParagraph = nextParagraph => {
     state.paragraph = nextParagraph;
     state.chunkParagraph = -1;

@@ -8,7 +8,7 @@ const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; char
 createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
-    if (url.pathname === '/api/tts') { await ttsHandler(req, res); return; }
+    if (url.pathname === '/api/tts' || url.pathname === '/api/tts.mp3') { await ttsHandler(req, res); return; }
     if (url.pathname === '/api/chapter') { await chapterHandler(req, res); return; }
     const file = resolve(root, `.${decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname)}`);
     if (!file.startsWith(root)) throw new Error('forbidden');

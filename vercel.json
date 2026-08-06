@@ -11,6 +11,12 @@
       "includeFiles": "chapters.js"
     }
   },
+  "rewrites": [
+    {
+      "source": "/api/tts.mp3",
+      "destination": "/api/tts"
+    }
+  ],
   "headers": [
     {
       "source": "/",

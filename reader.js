@@ -72,6 +72,16 @@
   ];
   let edgeAudioContext = null;
   let edgePrefetch = null;
+  const retiredEdgeAudios = new WeakSet();
+  const retireEdgeAudio = audio => {
+    if (!audio || retiredEdgeAudios.has(audio)) return;
+    retiredEdgeAudios.add(audio);
+    audio.onended = null;
+    audio.onerror = null;
+    try { audio.pause(); } catch { /* Audio đã bị Safari giải phóng. */ }
+    try { audio.removeAttribute('src'); audio.load(); } catch { /* Bỏ qua nếu audio đã kết thúc. */ }
+    try { audio.edgeSource?.disconnect(); } catch { /* AudioContext đã bị đóng. */ }
+  };
   let bridgeRequestId = 0;
   const sendTtsMessage = (message, callback = () => {}) => {
     if (directExtensionTts) { chrome.runtime.sendMessage(message, callback); return; }
@@ -397,8 +407,7 @@
       edgePrefetch = null;
       return ready;
     }
-    edgePrefetch?.audio?.pause();
-    edgePrefetch?.audio?.edgeSource?.disconnect();
+    retireEdgeAudio(edgePrefetch?.audio);
     const audio = edgeAudioFor(text, voice);
     audio.onerror = () => { if (edgePrefetch?.audio === audio) edgePrefetch = null; };
     audio.load();
@@ -513,9 +522,10 @@
       state.paused = false;
       audio.addEventListener('timeupdate', updateProgress);
       audio.onended = () => {
-        if (state.utterance?.audio !== audio || token !== state.speakToken) return;
+        if (retiredEdgeAudios.has(audio)) return;
+        if (state.utterance?.audio !== audio || token !== state.speakToken) { retireEdgeAudio(audio); return; }
         audio.removeEventListener('timeupdate', updateProgress);
-        audio.edgeSource?.disconnect();
+        retireEdgeAudio(audio);
         state.paragraph = chapter.paragraphs.length - 1;
         markReading(state.paragraph);
         saveProgress(state.index, state.paragraph);
@@ -543,7 +553,8 @@
       syncControls();
       let playbackStarted = false;
       const startWhenReady = () => {
-        if (playbackStarted || state.utterance?.audio !== audio) return;
+        if (playbackStarted) return;
+        if (retiredEdgeAudios.has(audio) || state.utterance?.audio !== audio) { retireEdgeAudio(audio); return; }
         skipEdgeLeadSilence(audio);
         edgeAudioContext?.resume().catch(() => {});
         audio.play().then(() => {
@@ -581,17 +592,25 @@
         else if (nextParagraphText) prepareEdgeAudio(nextParagraphText, state.voice);
       }
       audio.onended = () => {
-        if (state.utterance?.audio !== audio || state.utterance?.paragraph !== paragraph || state.utterance?.chunkIndex !== chunkIndex || state.paragraph !== paragraph || state.chunkIndex !== chunkIndex || token !== state.speakToken) return;
-        audio.onended = null;
-        audio.edgeSource?.disconnect();
+        if (retiredEdgeAudios.has(audio)) return;
+        if (state.utterance?.audio !== audio || state.utterance?.paragraph !== paragraph || state.utterance?.chunkIndex !== chunkIndex || state.paragraph !== paragraph || state.chunkIndex !== chunkIndex || token !== state.speakToken) {
+          retireEdgeAudio(audio);
+          return;
+        }
+        retireEdgeAudio(audio);
         if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); }
         else { advanceParagraph(audioExport.recorder ? state.exportEndParagraph : state.paragraph + 1); }
       };
-      audio.onerror = () => { if (state.utterance?.audio !== audio || state.utterance?.paragraph !== paragraph || state.utterance?.chunkIndex !== chunkIndex) return; state.edgeFailed = true; state.paused = true; syncControls(); status('Edge TTS tạm lỗi. Bấm Tiếp tục để thử lại đoạn này.'); };
+      audio.onerror = () => {
+        if (retiredEdgeAudios.has(audio)) return;
+        if (state.utterance?.audio !== audio || state.utterance?.paragraph !== paragraph || state.utterance?.chunkIndex !== chunkIndex) { retireEdgeAudio(audio); return; }
+        state.edgeFailed = true; state.paused = true; syncControls(); status('Edge TTS tạm lỗi. Bấm Tiếp tục để thử lại đoạn này.');
+      };
       syncControls();
       let playbackStarted = false;
       const startWhenReady = () => {
-        if (playbackStarted || state.utterance?.audio !== audio || state.utterance?.paragraph !== paragraph || state.utterance?.chunkIndex !== chunkIndex) return;
+        if (playbackStarted) return;
+        if (retiredEdgeAudios.has(audio) || state.utterance?.audio !== audio || state.utterance?.paragraph !== paragraph || state.utterance?.chunkIndex !== chunkIndex) { retireEdgeAudio(audio); return; }
         skipEdgeLeadSilence(audio);
         edgeAudioContext?.resume().catch(() => {});
         audio.play().then(() => {
@@ -638,7 +657,7 @@
     const speech = getSpeech(); if (!extensionTts && !edgeTtsEnabled && !speech) { status('Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 Web Speech TTS'); return; }
     stop(); claimPlayback(); state.voice = findVoice(); state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.maxParagraph = state.paragraph; state.chunkParagraph = -1; speakParagraph();
   };
-  const stop = () => { if (audioExport.recorder) { audioExport.batch = null; finishAudioExport(false); } state.speakToken += 1; state.requestId = 0; state.utterance?.audio?.pause(); state.utterance?.audio?.removeAttribute('src'); state.utterance?.audio?.load(); state.utterance?.audio?.edgeSource?.disconnect(); edgePrefetch?.audio?.pause(); edgePrefetch?.audio?.edgeSource?.disconnect(); edgePrefetch = null; state.utterance = null; state.paused = false; state.edgeFailed = false; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'stop' }); else if (!edgeTtsEnabled) getSpeech()?.cancel(); state.paragraph = -1; state.maxParagraph = -1; state.chunkParagraph = -1; releasePlaybackOwner(); syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); };
+  const stop = () => { if (audioExport.recorder) { audioExport.batch = null; finishAudioExport(false); } state.speakToken += 1; state.requestId = 0; retireEdgeAudio(state.utterance?.audio); retireEdgeAudio(edgePrefetch?.audio); edgePrefetch = null; state.utterance = null; state.paused = false; state.edgeFailed = false; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'stop' }); else if (!edgeTtsEnabled) getSpeech()?.cancel(); state.paragraph = -1; state.maxParagraph = -1; state.chunkParagraph = -1; releasePlaybackOwner(); syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); };
   const releasePlaybackOwner = () => {
     try {
       const owner = JSON.parse(localStorage.getItem(playbackStorageKey) || 'null');
@@ -654,12 +673,8 @@
     if (!state.utterance) return;
     state.speakToken += 1;
     state.requestId = 0;
-    state.utterance.audio?.pause();
-    state.utterance.audio?.removeAttribute('src');
-    state.utterance.audio?.load();
-    state.utterance.audio?.edgeSource?.disconnect();
-    edgePrefetch?.audio?.pause();
-    edgePrefetch?.audio?.edgeSource?.disconnect();
+    retireEdgeAudio(state.utterance.audio);
+    retireEdgeAudio(edgePrefetch?.audio);
     edgePrefetch = null;
     state.utterance = null;
     state.paused = false;

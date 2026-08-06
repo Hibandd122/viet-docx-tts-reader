@@ -38,7 +38,7 @@ export default async function handler(request, response) {
     const chunks = [];
     for await (const chunk of tts.synthesizeStream(text, voice, { rate, pitch, volume, outputFormat: Constants.OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3 })) chunks.push(Buffer.from(chunk));
     const audio = Buffer.concat(chunks);
-    response.writeHead(200, { 'Content-Type':'audio/mpeg', 'Content-Length':String(audio.length), 'Accept-Ranges':'bytes' });
+    response.writeHead(200, { 'Content-Type':'audio/mpeg', 'Content-Length':String(audio.length) });
     response.end(audio);
   } catch (error) {
     if (!response.headersSent) { response.statusCode = 502; response.setHeader('Content-Type', 'text/plain; charset=utf-8'); }

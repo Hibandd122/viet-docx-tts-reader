@@ -55,7 +55,10 @@
   const directExtensionTts = typeof chrome !== 'undefined' && !!chrome.runtime?.id;
   const bridgeExtensionId = 'eflagfifekpkhoiaeciaobdaiabpppbd';
   const webExtensionMessaging = !directExtensionTts && typeof chrome !== 'undefined' && typeof chrome.runtime?.sendMessage === 'function';
-  const appleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const appleTouchDesktop = /Macintosh|MacIntel/i.test(navigator.userAgent || navigator.platform || '') && (
+    Number(navigator.maxTouchPoints) > 1 || 'ontouchstart' in window || 'ontouchend' in document
+  );
+  const appleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) || appleTouchDesktop || navigator.standalone === true;
   const localWebSpeech = /^(localhost|127\.0\.0\.1|::1)$/i.test(location.hostname);
   const extensionTts = !appleMobile && !localWebSpeech && (directExtensionTts || webExtensionMessaging);
   const edgeTtsEnabled = !extensionTts && !localWebSpeech;

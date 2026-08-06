@@ -66,7 +66,9 @@
   // /api/tts.mp3 được rewrite về cùng Edge TTS handler ở Vercel.
   const edgeTtsEndpoint = readerConfig.edgeTtsEndpoint || '/api/tts.mp3';
   const edgeChapterEndpoint = readerConfig.edgeChapterEndpoint || '/api/chapter';
-  const edgePrefetchEnabled = !appleMobile;
+  // Một audio duy nhất giúp loại bỏ hoàn toàn khả năng Orion/Safari phát nhầm
+  // buffer prefetch cũ sau khi chuyển đoạn.
+  const edgePrefetchEnabled = false;
   // Ph\u00e1t t\u1eebng \u0111o\u1ea1n l\u00e0 m\u1eb7c \u0111\u1ecbnh: onended c\u1ee7a audio l\u00e0 m\u1ed1c th\u1eddi gian ch\u00ednh x\u00e1c, kh\u00f4ng b\u1ecb l\u1ec7ch do stream ch\u01b0a t\u1ea3i \u0111\u1ec1u.
   const edgeChapterEnabled = edgeTtsEnabled && readerConfig.edgeChapter === true;
   const edgeTtsVoices = [

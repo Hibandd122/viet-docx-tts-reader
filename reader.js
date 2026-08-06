@@ -115,6 +115,7 @@
     if (small) small.textContent = `Phần ${index + 1} · ${progress}`;
   };
   const markReading = index => {
+    if (state.utterance?.edgeChapter && index < state.paragraph) return;
     document.querySelectorAll('.content p.reading-now, .content p.resume-point').forEach(p => p.classList.remove('reading-now', 'resume-point'));
     const paragraph = $('paragraph-' + index);
     paragraph?.classList.add('reading-now');
@@ -379,15 +380,17 @@
     const start = utterance.startParagraph;
     const paragraphs = chapter.paragraphs.slice(start);
     const lengths = paragraphs.map(text => Math.max(1, String(text || '').length));
-    const totalLength = lengths.reduce((sum, length) => sum + length, 0);
-    const duration = Number(audio.duration);
-    const elapsedLength = Number.isFinite(duration) && duration > 0
-      ? totalLength * Math.min(1, Math.max(0, audio.currentTime / duration))
-      : audio.currentTime * 14;
+    // Stream MP3 có duration thay đổi trong lúc tải. Dùng duration để quy đổi
+    // sẽ làm con trỏ nhảy lùi khi trình duyệt nhận thêm dữ liệu; dùng một đồng
+    // hồ đơn điệu với khoảng nghỉ ước tính giữa các đoạn thay vào đó.
+    const speechCharsPerSecond = 13;
+    const paragraphPauseSeconds = 0.8;
     let passed = 0;
     let paragraphOffset = 0;
-    while (paragraphOffset < lengths.length - 1 && passed + lengths[paragraphOffset] < elapsedLength) {
-      passed += lengths[paragraphOffset];
+    while (paragraphOffset < lengths.length - 1) {
+      const paragraphSeconds = lengths[paragraphOffset] / speechCharsPerSecond + paragraphPauseSeconds;
+      if (passed + paragraphSeconds > Math.max(0, audio.currentTime)) break;
+      passed += paragraphSeconds;
       paragraphOffset += 1;
     }
     const nextParagraph = Math.min(chapter.paragraphs.length - 1, start + paragraphOffset);

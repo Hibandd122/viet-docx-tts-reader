@@ -23,6 +23,24 @@
       "headers": [
         { "key": "Content-Type", "value": "application/manifest+json; charset=utf-8" }
       ]
+    },
+    {
+      "source": "/reader.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/chapters.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
+      ]
     }
   ]
 }

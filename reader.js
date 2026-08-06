@@ -464,12 +464,13 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden) saveCurrentProgress(); });
   window.addEventListener('pagehide', saveCurrentProgress);
   const advanceParagraph = nextParagraph => {
-    state.paragraph = nextParagraph;
+    const safeNextParagraph = Math.max(Number(nextParagraph) || 0, state.maxParagraph);
+    state.paragraph = safeNextParagraph;
     state.chunkParagraph = -1;
     if (!audioExport.recorder) {
       state.resumeChapter = state.index;
-      state.resumeParagraph = Math.max(state.resumeParagraph, nextParagraph);
-      saveProgress(state.index, nextParagraph);
+      state.resumeParagraph = Math.max(state.resumeParagraph, safeNextParagraph);
+      saveProgress(state.index, safeNextParagraph);
     }
     speakParagraph();
   };
@@ -627,6 +628,7 @@
   };
   const speak = () => {
     if (!chapters[state.index]) return;
+    if (state.utterance) return;
     const speech = getSpeech(); if (!extensionTts && !edgeTtsEnabled && !speech) { status('Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 Web Speech TTS'); return; }
     stop(); claimPlayback(); state.voice = findVoice(); state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.maxParagraph = state.paragraph; state.chunkParagraph = -1; speakParagraph();
   };

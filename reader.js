@@ -398,6 +398,14 @@
       nowReading(`Đang đọc đoạn ${nextParagraph + 1}/${chapter.paragraphs.length}`);
     }
   };
+  const flushEdgeChapterProgress = () => {
+    const audio = state.utterance?.edgeChapter ? state.utterance.audio : null;
+    if (!audio) return;
+    updateEdgeChapterProgress(audio);
+    saveProgress(state.index, state.paragraph);
+  };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) flushEdgeChapterProgress(); });
+  window.addEventListener('pagehide', flushEdgeChapterProgress);
   const speakParagraph = () => {
     const chapter = chapters[state.index];
     if (!chapter || state.paragraph < 0) { state.utterance = null; state.paused = false; syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); return; }
@@ -520,6 +528,9 @@
     }
     if (extensionTts) {
       const token = ++state.speakToken;
+      // Khóa tạm requestId trong lúc request mới đang chờ phản hồi. Sự kiện
+      // `end` của request cũ có thể về muộn sau khi ChromeOS đã chuyển đoạn.
+      state.requestId = -1;
       state.utterance = { extension:true, token };
       syncControls();
       sendTtsMessage({ type:'TTS_SPEAK', text:state.chunks[state.chunkIndex], voiceName:state.voice?.voiceName, rate:Number($('rate').value), pitch:state.pitch, volume:state.volume }, response => {
@@ -543,7 +554,7 @@
   };
   const stop = () => { if (audioExport.recorder) { audioExport.batch = null; finishAudioExport(false); } state.speakToken += 1; state.requestId = 0; state.utterance?.audio?.pause(); state.utterance?.audio?.removeAttribute('src'); state.utterance?.audio?.load(); state.utterance?.audio?.edgeSource?.disconnect(); edgePrefetch?.audio?.pause(); edgePrefetch?.audio?.edgeSource?.disconnect(); edgePrefetch = null; state.utterance = null; state.paused = false; state.edgeFailed = false; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'stop' }); else if (!edgeTtsEnabled) getSpeech()?.cancel(); state.paragraph = -1; state.chunkParagraph = -1; syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); };
   $('playButton').onclick = () => { testingVoice = false; speak(); };
-  $('pauseButton').onclick = () => { if (!state.utterance) return; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'pause' }); else if (edgeTtsEnabled) state.utterance.audio?.pause(); else getSpeech()?.pause(); state.paused = true; syncControls(); status('\u0110\u00e3 t\u1ea1m d\u1eebng'); };
+  $('pauseButton').onclick = () => { if (!state.utterance) return; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'pause' }); else if (edgeTtsEnabled) { flushEdgeChapterProgress(); state.utterance.audio?.pause(); } else getSpeech()?.pause(); state.paused = true; syncControls(); status('\u0110\u00e3 t\u1ea1m d\u1eebng'); };
   $('resumeButton').onclick = () => { const speech = getSpeech(); if (edgeTtsEnabled && state.edgeFailed) { state.edgeFailed = false; state.utterance = null; state.paused = false; state.speakToken += 1; speakParagraph(); return; } if (edgeTtsEnabled && state.utterance?.audio) { edgeAudioContext?.resume().catch(() => {}); state.utterance.audio.play().then(() => { state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); }).catch(() => { state.edgeFailed = true; state.paused = true; syncControls(); status('Edge TTS ch\u01b0a s\u1eb5n s\u00e0ng. H\u00e3y b\u1ea5m Ti\u1ebfp t\u1ee5c l\u1ea1i.'); }); return; } if ((!extensionTts && !edgeTtsEnabled && speech?.paused) || (extensionTts && state.utterance && state.paused)) { if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'resume' }); else speech.resume(); state.paused = false; syncControls(); status('\u0110ang ti\u1ebfp t\u1ee5c'); return; } state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.chunkParagraph = -1; speakParagraph(); };
   $('stopButton').onclick = () => { testingVoice = false; stop(); };
   $('prevButton').onclick = () => select(Math.max(0, state.index - 1)); $('nextButton').onclick = () => select(Math.min(chapters.length - 1, state.index + 1));
@@ -606,7 +617,7 @@
   });
   $('voiceButton').onclick = async () => { await loadVoices(); if (edgeTtsEnabled) { status(`Edge TTS: ${state.voices.map(v => v.label).join(', ')}`); return; } const names = state.voices.map(v => v.voiceName || v.name || v.lang); const voice2 = state.voices.find(isVoice2); status(voice2 ? `\u0110\u00e3 t\u00ecm th\u1ea5y: ${voice2.voiceName || voice2.name}` : names.length ? `Kh\u00f4ng c\u00f3 Vietnamese 2. Voice hi\u1ec7n c\u00f3: ${names.join(', ')}` : 'Kh\u00f4ng t\u00ecm th\u1ea5y voice Vi\u1ec7t'); };
   if (!extensionTts && !edgeTtsEnabled && getSpeech()) getSpeech().onvoiceschanged = () => void loadVoices();
-  const handleReadingEvent = message => { if (message.type !== 'TTS_EVENT' || !state.utterance || state.paragraph < 0 || (state.requestId && message.requestId !== state.requestId)) return; if (message.event.type === 'word' || message.event.type === 'sentence') markReading(state.paragraph); if (message.event.type === 'end') { if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); } else { state.paragraph = audioExport.recorder ? state.exportEndParagraph : state.paragraph + 1; state.chunkParagraph = -1; speakParagraph(); } } if (message.event.type === 'error') { state.utterance = null; state.paused = false; syncControls(); status(message.event.errorMessage || 'TTS l\u1ed7i'); } };
+  const handleReadingEvent = message => { if (message.type !== 'TTS_EVENT' || !state.utterance || state.paragraph < 0 || state.requestId <= 0 || message.requestId !== state.requestId) return; if (message.event.type === 'word' || message.event.type === 'sentence') markReading(state.paragraph); if (message.event.type === 'end') { state.requestId = 0; if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); } else { state.paragraph = audioExport.recorder ? state.exportEndParagraph : state.paragraph + 1; state.chunkParagraph = -1; speakParagraph(); } } if (message.event.type === 'error') { state.requestId = 0; state.utterance = null; state.paused = false; syncControls(); status(message.event.errorMessage || 'TTS l\u1ed7i'); } };
   if (directExtensionTts) chrome.runtime.onMessage.addListener(handleReadingEvent);
   if (!directExtensionTts) window.addEventListener('message', event => { if (event.data?.source === 'viet-docx-tts-web' && event.data?.event) handleReadingEvent(event.data.event); });
   renderList(); select(Math.min(state.resumeChapter, Math.max(0, chapters.length - 1)), true); syncControls(); void loadVoices();

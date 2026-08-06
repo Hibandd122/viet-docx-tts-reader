@@ -61,6 +61,7 @@
   const edgeTtsEnabled = !extensionTts && !localWebSpeech;
   const edgeTtsEndpoint = readerConfig.edgeTtsEndpoint || '/api/tts';
   const edgeChapterEndpoint = readerConfig.edgeChapterEndpoint || '/api/chapter';
+  const edgePrefetchEnabled = !appleMobile;
   // Ph\u00e1t t\u1eebng \u0111o\u1ea1n l\u00e0 m\u1eb7c \u0111\u1ecbnh: onended c\u1ee7a audio l\u00e0 m\u1ed1c th\u1eddi gian ch\u00ednh x\u00e1c, kh\u00f4ng b\u1ecb l\u1ec7ch do stream ch\u01b0a t\u1ea3i \u0111\u1ec1u.
   const edgeChapterEnabled = edgeTtsEnabled && readerConfig.edgeChapter === true;
   const edgeTtsVoices = [
@@ -571,10 +572,12 @@
       const audio = takeEdgeAudio(state.chunks[state.chunkIndex], state.voice);
       state.utterance = { edge:true, token, audio, paragraph, chunkIndex };
       state.paused = false;
-      const nextText = state.chunks[state.chunkIndex + 1];
-      const nextParagraphText = chapter.paragraphs[state.paragraph + 1];
-      if (nextText) prepareEdgeAudio(nextText, state.voice);
-      else if (nextParagraphText) prepareEdgeAudio(nextParagraphText, state.voice);
+      if (edgePrefetchEnabled) {
+        const nextText = state.chunks[state.chunkIndex + 1];
+        const nextParagraphText = chapter.paragraphs[state.paragraph + 1];
+        if (nextText) prepareEdgeAudio(nextText, state.voice);
+        else if (nextParagraphText) prepareEdgeAudio(nextParagraphText, state.voice);
+      }
       audio.onended = () => {
         if (state.utterance?.audio !== audio || state.utterance?.paragraph !== paragraph || state.utterance?.chunkIndex !== chunkIndex || state.paragraph !== paragraph || state.chunkIndex !== chunkIndex || token !== state.speakToken) return;
         audio.edgeSource?.disconnect();

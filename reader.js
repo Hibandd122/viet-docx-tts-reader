@@ -26,7 +26,7 @@
     localStorage.setItem(progressStorageKey, JSON.stringify({ chapter, paragraph:chapterProgress[chapter], chapters:chapterProgress }));
   };
   const settings = { ...savedSettings };
-  const state = { index: 0, utterance: null, paused: false, edgeFailed: false, speakToken: 0, requestId: 0, voice: null, voices: [], paragraph: -1, chunkIndex: 0, chunkParagraph: -1, chunks: [], volume: Number(savedSettings.volume ?? 1), pitch: Number(savedSettings.pitch ?? 1), autoScroll: savedSettings.autoScroll !== false, autoNext: savedSettings.autoNext === true, resumeChapter: Number(savedProgress.chapter) || 0, resumeParagraph: progressFor(Number(savedProgress.chapter) || 0) };
+  const state = { index: 0, utterance: null, paused: false, edgeFailed: false, speakToken: 0, requestId: 0, voice: null, voices: [], paragraph: -1, maxParagraph: -1, chunkIndex: 0, chunkParagraph: -1, chunks: [], volume: Number(savedSettings.volume ?? 1), pitch: Number(savedSettings.pitch ?? 1), autoScroll: savedSettings.autoScroll !== false, autoNext: savedSettings.autoNext === true, resumeChapter: Number(savedProgress.chapter) || 0, resumeParagraph: progressFor(Number(savedProgress.chapter) || 0) };
   window.addEventListener('storage', event => {
     if (event.key !== progressStorageKey || !event.newValue) return;
     try {
@@ -145,6 +145,8 @@
   };
   const markReading = (index, allowRewind = false) => {
     if (state.utterance?.edgeChapter && index < state.paragraph) return;
+    if (!allowRewind && state.maxParagraph >= 0 && index < state.maxParagraph) return;
+    state.maxParagraph = allowRewind ? index : Math.max(state.maxParagraph, index);
     document.querySelectorAll('.content p.reading-now, .content p.resume-point').forEach(p => p.classList.remove('reading-now', 'resume-point'));
     const paragraph = $('paragraph-' + index);
     paragraph?.classList.add('reading-now');
@@ -314,7 +316,7 @@
       if (pendingImages.length) Promise.all(pendingImages.map(image => new Promise(resolve => { const done = () => resolve(); image.addEventListener('load', done, { once:true }); image.addEventListener('error', done, { once:true }); }))).then(restoreScroll);
       else restoreScroll();
     }
-    $('content').onclick = event => { const paragraph = event.target.closest('p[id^="paragraph-"]'); if (!paragraph) return; const selected = Number(paragraph.id.slice(10)); stop(); state.resumeChapter = state.index; state.resumeParagraph = selected; saveProgress(state.index, selected, true); markReading(selected, true); nowReading(`\u0110\u00e3 ch\u1ecdn \u0111o\u1ea1n ${selected + 1}/${chapter.paragraphs.length}`); status(`S\u1eb5n s\u00e0ng ti\u1ebfp t\u1ee5c t\u1eeb \u0111o\u1ea1n ${selected + 1}`); };
+    $('content').onclick = event => { const paragraph = event.target.closest('p[id^="paragraph-"]'); if (!paragraph) return; const selected = Number(paragraph.id.slice(10)); stop(); state.maxParagraph = selected; state.resumeChapter = state.index; state.resumeParagraph = selected; saveProgress(state.index, selected, true); markReading(selected, true); nowReading(`\u0110\u00e3 ch\u1ecdn \u0111o\u1ea1n ${selected + 1}/${chapter.paragraphs.length}`); status(`S\u1eb5n s\u00e0ng ti\u1ebfp t\u1ee5c t\u1eeb \u0111o\u1ea1n ${selected + 1}`); };
     document.querySelectorAll('.chapter-link').forEach((b, i) => { const active = i === index; b.classList.toggle('active', active); b.setAttribute('aria-current', active ? 'page' : 'false'); });
     status(`${chapter.paragraphs.length} \u0111o\u1ea1n \u00b7 s\u1eb5n s\u00e0ng \u0111\u1ecdc`);
     if (savedParagraph > 0) nowReading(`S\u1eb5n s\u00e0ng ti\u1ebfp t\u1ee5c t\u1eeb \u0111o\u1ea1n ${savedParagraph + 1}/${chapter.paragraphs.length}`);
@@ -441,6 +443,12 @@
   const speakParagraph = () => {
     const chapter = chapters[state.index];
     if (!chapter || state.paragraph < 0) { state.utterance = null; state.paused = false; syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); return; }
+    // Callback c\u0169 ho\u1eb7c retry l\u1ec7ch m\u1ea1ng kh\u00f4ng \u0111\u01b0\u1ee3c quay v\u1ec1 \u0111o\u1ea1n \u0111\u00e3 qua trong c\u00f9ng m\u1ed9t phi\u00ean.
+    if (state.maxParagraph >= 0 && state.paragraph < state.maxParagraph) {
+      state.paragraph = state.maxParagraph;
+      state.chunkParagraph = -1;
+    }
+    state.maxParagraph = Math.max(state.maxParagraph, state.paragraph);
     if (state.paragraph >= chapter.paragraphs.length) {
       if (audioExport.recorder) { finishAudioExport(true); state.utterance = null; state.paused = false; syncControls(); nowReading('\u0110\u00e3 \u0111\u1ecdc xong'); status('\u0110\u00e3 \u0111\u1ecdc xong ch\u01b0\u01a1ng'); return; }
       if (state.autoNext && state.index < chapters.length - 1) { select(state.index + 1); state.paragraph = 0; state.chunkParagraph = -1; speakParagraph(); return; }
@@ -576,17 +584,17 @@
     }
     const utterance = new SpeechSynthesisUtterance(state.chunks[state.chunkIndex]);
     utterance.lang = 'vi-VN'; if (state.voice) utterance.voice = state.voice; utterance.rate = Number($('rate').value); utterance.pitch = state.pitch; utterance.volume = state.volume;
-    utterance.onboundary = () => markReading(state.paragraph);
+    utterance.onboundary = () => { if (state.utterance !== utterance) return; markReading(state.paragraph); };
     utterance.onend = () => { if (state.utterance !== utterance) return; if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); } else { state.paragraph = audioExport.recorder ? state.exportEndParagraph : state.paragraph + 1; state.chunkParagraph = -1; speakParagraph(); } };
-    utterance.onerror = event => { state.utterance = null; syncControls(); status(`TTS l\u1ed7i: ${event.error || 'kh\u00f4ng ph\u00e1t \u0111\u01b0\u1ee3c'}`); };
+    utterance.onerror = event => { if (state.utterance !== utterance) return; state.utterance = null; syncControls(); status(`TTS l\u1ed7i: ${event.error || 'kh\u00f4ng ph\u00e1t \u0111\u01b0\u1ee3c'}`); };
     state.utterance = utterance; state.paused = false; syncControls(); getSpeech().speak(utterance);
   };
   const speak = () => {
     if (!chapters[state.index]) return;
     const speech = getSpeech(); if (!extensionTts && !edgeTtsEnabled && !speech) { status('Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 Web Speech TTS'); return; }
-    stop(); claimPlayback(); state.voice = findVoice(); state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.chunkParagraph = -1; speakParagraph();
+    stop(); claimPlayback(); state.voice = findVoice(); state.paragraph = state.resumeChapter === state.index ? state.resumeParagraph : progressFor(state.index); state.maxParagraph = state.paragraph; state.chunkParagraph = -1; speakParagraph();
   };
-  const stop = () => { if (audioExport.recorder) { audioExport.batch = null; finishAudioExport(false); } state.speakToken += 1; state.requestId = 0; state.utterance?.audio?.pause(); state.utterance?.audio?.removeAttribute('src'); state.utterance?.audio?.load(); state.utterance?.audio?.edgeSource?.disconnect(); edgePrefetch?.audio?.pause(); edgePrefetch?.audio?.edgeSource?.disconnect(); edgePrefetch = null; state.utterance = null; state.paused = false; state.edgeFailed = false; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'stop' }); else if (!edgeTtsEnabled) getSpeech()?.cancel(); state.paragraph = -1; state.chunkParagraph = -1; releasePlaybackOwner(); syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); };
+  const stop = () => { if (audioExport.recorder) { audioExport.batch = null; finishAudioExport(false); } state.speakToken += 1; state.requestId = 0; state.utterance?.audio?.pause(); state.utterance?.audio?.removeAttribute('src'); state.utterance?.audio?.load(); state.utterance?.audio?.edgeSource?.disconnect(); edgePrefetch?.audio?.pause(); edgePrefetch?.audio?.edgeSource?.disconnect(); edgePrefetch = null; state.utterance = null; state.paused = false; state.edgeFailed = false; if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'stop' }); else if (!edgeTtsEnabled) getSpeech()?.cancel(); state.paragraph = -1; state.maxParagraph = -1; state.chunkParagraph = -1; releasePlaybackOwner(); syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); };
   const releasePlaybackOwner = () => {
     try {
       const owner = JSON.parse(localStorage.getItem(playbackStorageKey) || 'null');
@@ -615,6 +623,7 @@
     if (extensionTts) sendTtsMessage({ type:'TTS_CONTROL', action:'stop' });
     else if (!edgeTtsEnabled) getSpeech()?.cancel();
     state.paragraph = -1;
+    state.maxParagraph = -1;
     state.chunkParagraph = -1;
     syncControls();
     nowReading('\u0110\u00e3 d\u1eebng v\u00ec tab kh\u00e1c \u0111ang ph\u00e1t');

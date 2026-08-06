@@ -35,9 +35,11 @@ export default async function handler(request, response) {
     const volume = /^\d{1,3}%$/.test(String(input.volume)) ? String(input.volume) : '100%';
     if (!text || text.length > 3000) { response.statusCode = 400; response.end('Text không hợp lệ hoặc quá dài'); return; }
     const tts = new EdgeTTS();
-    response.writeHead(200, { 'Content-Type':'audio/mpeg', 'Transfer-Encoding':'chunked' });
-    for await (const chunk of tts.synthesizeStream(text, voice, { rate, pitch, volume, outputFormat: Constants.OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3 })) response.write(Buffer.from(chunk));
-    response.end();
+    const chunks = [];
+    for await (const chunk of tts.synthesizeStream(text, voice, { rate, pitch, volume, outputFormat: Constants.OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3 })) chunks.push(Buffer.from(chunk));
+    const audio = Buffer.concat(chunks);
+    response.writeHead(200, { 'Content-Type':'audio/mpeg', 'Content-Length':String(audio.length), 'Accept-Ranges':'bytes' });
+    response.end(audio);
   } catch (error) {
     if (!response.headersSent) { response.statusCode = 502; response.setHeader('Content-Type', 'text/plain; charset=utf-8'); }
     response.end(`Edge TTS lỗi: ${error.message || 'không kết nối được'}`);

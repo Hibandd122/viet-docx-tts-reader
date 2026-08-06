@@ -51,6 +51,8 @@
   const edgeTtsEnabled = !extensionTts && !localWebSpeech;
   const edgeTtsEndpoint = readerConfig.edgeTtsEndpoint || '/api/tts';
   const edgeChapterEndpoint = readerConfig.edgeChapterEndpoint || '/api/chapter';
+  // Ph\u00e1t t\u1eebng \u0111o\u1ea1n l\u00e0 m\u1eb7c \u0111\u1ecbnh: onended c\u1ee7a audio l\u00e0 m\u1ed1c th\u1eddi gian ch\u00ednh x\u00e1c, kh\u00f4ng b\u1ecb l\u1ec7ch do stream ch\u01b0a t\u1ea3i \u0111\u1ec1u.
+  const edgeChapterEnabled = edgeTtsEnabled && readerConfig.edgeChapter === true;
   const edgeTtsVoices = [
     { voiceName:'vi-VN-HoaiMyNeural', lang:'vi-VN', label:'Edge TTS · Hoài My (nữ)' },
     { voiceName:'vi-VN-NamMinhNeural', lang:'vi-VN', label:'Edge TTS · Nam Minh (nam)' }
@@ -457,7 +459,7 @@
     }
     markReading(state.paragraph);
     nowReading(`\u0110ang \u0111\u1ecdc \u0111o\u1ea1n ${state.paragraph + 1}/${chapter.paragraphs.length}`);
-    if (edgeTtsEnabled && !audioExport.recorder) {
+    if (edgeChapterEnabled && !audioExport.recorder) {
       const token = ++state.speakToken;
       const startParagraph = state.paragraph;
       const audio = edgeChapterAudioFor(state.index, startParagraph, state.voice);
@@ -526,7 +528,9 @@
       state.utterance = { edge:true, token, audio };
       state.paused = false;
       const nextText = state.chunks[state.chunkIndex + 1];
+      const nextParagraphText = chapter.paragraphs[state.paragraph + 1];
       if (nextText) prepareEdgeAudio(nextText, state.voice);
+      else if (nextParagraphText) prepareEdgeAudio(nextParagraphText, state.voice);
       audio.onended = () => {
         if (state.utterance?.audio !== audio || token !== state.speakToken) return;
         audio.edgeSource?.disconnect();

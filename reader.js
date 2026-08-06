@@ -459,6 +459,16 @@
   };
   document.addEventListener('visibilitychange', () => { if (document.hidden) flushEdgeChapterProgress(); });
   window.addEventListener('pagehide', flushEdgeChapterProgress);
+  const advanceParagraph = nextParagraph => {
+    state.paragraph = nextParagraph;
+    state.chunkParagraph = -1;
+    if (!audioExport.recorder) {
+      state.resumeChapter = state.index;
+      state.resumeParagraph = Math.max(state.resumeParagraph, nextParagraph);
+      saveProgress(state.index, nextParagraph);
+    }
+    speakParagraph();
+  };
   const speakParagraph = () => {
     const chapter = chapters[state.index];
     if (!chapter || state.paragraph < 0) { state.utterance = null; state.paused = false; syncControls(); nowReading('\u0110\u00e3 d\u1eebng'); return; }
@@ -564,7 +574,7 @@
         if (state.utterance?.audio !== audio || state.utterance?.paragraph !== paragraph || state.utterance?.chunkIndex !== chunkIndex || state.paragraph !== paragraph || state.chunkIndex !== chunkIndex || token !== state.speakToken) return;
         audio.edgeSource?.disconnect();
         if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); }
-        else { state.paragraph = audioExport.recorder ? state.exportEndParagraph : state.paragraph + 1; state.chunkParagraph = -1; speakParagraph(); }
+        else { advanceParagraph(audioExport.recorder ? state.exportEndParagraph : state.paragraph + 1); }
       };
       audio.onerror = () => { if (state.utterance?.audio !== audio || state.utterance?.paragraph !== paragraph || state.utterance?.chunkIndex !== chunkIndex) return; state.edgeFailed = true; state.paused = true; syncControls(); status('Edge TTS tạm lỗi. Bấm Tiếp tục để thử lại đoạn này.'); };
       syncControls();
@@ -607,7 +617,7 @@
     const utterance = new SpeechSynthesisUtterance(state.chunks[state.chunkIndex]);
     utterance.lang = 'vi-VN'; if (state.voice) utterance.voice = state.voice; utterance.rate = Number($('rate').value); utterance.pitch = state.pitch; utterance.volume = state.volume;
     utterance.onboundary = () => { if (state.utterance !== utterance) return; markReading(state.paragraph); };
-    utterance.onend = () => { if (state.utterance !== utterance) return; if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); } else { state.paragraph = audioExport.recorder ? state.exportEndParagraph : state.paragraph + 1; state.chunkParagraph = -1; speakParagraph(); } };
+    utterance.onend = () => { if (state.utterance !== utterance) return; if (state.chunkIndex + 1 < state.chunks.length) { state.chunkIndex += 1; speakParagraph(); } else { advanceParagraph(audioExport.recorder ? state.exportEndParagraph : state.paragraph + 1); } };
     utterance.onerror = event => { if (state.utterance !== utterance) return; state.utterance = null; syncControls(); status(`TTS l\u1ed7i: ${event.error || 'kh\u00f4ng ph\u00e1t \u0111\u01b0\u1ee3c'}`); };
     state.utterance = utterance; state.paused = false; syncControls(); getSpeech().speak(utterance);
   };

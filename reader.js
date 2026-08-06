@@ -559,11 +559,13 @@
       audio.addEventListener('loadedmetadata', () => skipEdgeLeadSilence(audio), { once:true });
       syncControls();
       let playbackStarted = false;
+      let playRequested = false;
       const startWhenReady = () => {
-        if (playbackStarted) return;
+        if (playbackStarted || playRequested) return;
         if (retiredEdgeAudios.has(audio) || state.utterance?.audio !== audio) { retireEdgeAudio(audio); return; }
         skipEdgeLeadSilence(audio);
         edgeAudioContext?.resume().catch(() => {});
+        playRequested = true;
         audio.play().then(() => {
           playbackStarted = true;
           audio.removeEventListener('canplay', startWhenReady);
@@ -571,6 +573,7 @@
           state.paused = false;
           syncControls();
         }).catch(error => {
+          playRequested = false;
           if (error?.name === 'NotAllowedError') {
             state.edgeFailed = true;
             state.paused = true;
@@ -615,11 +618,13 @@
       };
       syncControls();
       let playbackStarted = false;
+      let playRequested = false;
       const startWhenReady = () => {
-        if (playbackStarted) return;
+        if (playbackStarted || playRequested) return;
         if (retiredEdgeAudios.has(audio) || state.utterance?.audio !== audio || state.utterance?.paragraph !== paragraph || state.utterance?.chunkIndex !== chunkIndex) { retireEdgeAudio(audio); return; }
         skipEdgeLeadSilence(audio);
         edgeAudioContext?.resume().catch(() => {});
+        playRequested = true;
         audio.play().then(() => {
           playbackStarted = true;
           audio.removeEventListener('canplay', startWhenReady);
@@ -627,6 +632,7 @@
           state.paused = false;
           syncControls();
         }).catch(error => {
+          playRequested = false;
           if (error?.name === 'NotAllowedError') { state.edgeFailed = true; state.paused = true; syncControls(); status('iOS chặn phát audio. Bấm Tiếp tục để cho phép Edge TTS.'); }
         });
       };

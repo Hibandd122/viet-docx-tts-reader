@@ -619,7 +619,10 @@
         // Orion/WebKit đôi lúc phát `ended` sớm khi nguồn còn đang đệm hoặc
         // vừa bị gián đoạn. Không được coi đó là hết đoạn, nếu không bộ đọc
         // sẽ nhảy sai và callback cũ có thể làm quay về đoạn trước.
-        if (completed || !audio.ended || (Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime + 0.2 < audio.duration)) return;
+        // Không dựa riêng vào `audio.ended`: Orion có thể phát sự kiện này
+        // trước khi thuộc tính ended được cập nhật. Chỉ bỏ qua nếu thời gian
+        // hiện tại còn cách cuối file một khoảng rõ ràng.
+        if (completed || (Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime + 0.2 < audio.duration)) return;
         completed = true;
         // Giữ media element ở trạng thái ended trong lúc mở đoạn mới. Xoá
         // src ngay bên trong `ended` có thể kích hoạt lỗi chuyển nguồn nền

@@ -97,6 +97,7 @@ $nodes = @($body.ChildNodes | Where-Object { $_.LocalName -in @('p','tbl') })
 $headingNodes = @($nodes | Where-Object { $_.LocalName -eq 'p' -and $_.SelectSingleNode('./w:pPr/w:pStyle/@w:val', $ns).Value -eq 'Heading2' })
 if (-not $headingNodes) { throw "File DOCX không có Heading 2 nào để tách chương." }
 $records = @()
+$phanText = ((0x0050, 0x0068, 0x1EA7, 0x006E | ForEach-Object { [char]$_ }) -join '')
 for ($i = 0; $i -lt $headingNodes.Count; $i++) {
   $heading = $headingNodes[$i]
   $next = if ($i + 1 -lt $headingNodes.Count) { $headingNodes[$i + 1] } else { $null }
@@ -114,6 +115,11 @@ for ($i = 0; $i -lt $headingNodes.Count; $i++) {
   $fileName = "${label}-${safe}.docx"
   Write-DocxChapter $sourceZip $xml $body $heading $next (Join-Path $chaptersDir $fileName)
   $records += [ordered]@{ label = "Phần $($i + 1)"; title = $title; file = "chapters/$fileName"; blocks = @($blocks) }
+}
+$recordIndex = 0
+foreach ($record in $records) {
+  $record.label = "$phanText $($recordIndex + 1)"
+  $recordIndex++
 }
 $sourceZip.Dispose()
 $jsonItems = @($records | ForEach-Object { ConvertTo-Json -InputObject $_ -Depth 5 -Compress })

@@ -13,7 +13,12 @@
       ]
     }
   ],
-  "rewrites": [
-    { "source": "/tts", "destination": "/api/tts" }
+  "routes": [
+    { "src": "/tts", "dest": "/api/tts" },
+    { "src": "/api/tts", "dest": "/api/tts" },
+    { "src": "/api/voices", "dest": "/api/voices" },
+    { "src": "/api/status", "dest": "/api/status" },
+    { "handle": "filesystem" },
+    { "src": "/.*", "dest": "/index.html" }
   ]
 }

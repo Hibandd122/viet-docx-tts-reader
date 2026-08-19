@@ -16,6 +16,7 @@
   "rewrites": [
     { "source": "/tts", "destination": "/api/tts" },
     { "source": "/api/tts", "destination": "/api/tts" },
-    { "source": "/api/voices", "destination": "/api/voices" }
+    { "source": "/api/voices", "destination": "/api/voices" },
+    { "source": "/api/status", "destination": "/api/status" }
   ]
 }

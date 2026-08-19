@@ -9,6 +9,8 @@
 (() => {
   'use strict';
 
+  if (typeof window === 'undefined') return;
+
   const chapters = window.CHAPTERS || [];
   const $ = id => document.getElementById(id);
   const $$ = sel => document.querySelectorAll(sel);

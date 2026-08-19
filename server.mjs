@@ -96,8 +96,8 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    // Endpoint: /tts
-    if (pathname === '/tts') {
+    // Endpoint: /tts hoặc /api/tts
+    if (pathname === '/tts' || pathname === '/api/tts') {
       const text = (url.searchParams.get('text') || '').trim();
       const voice = url.searchParams.get('voice') || 'vi-VN-HoaiMyNeural';
       const rateParam = url.searchParams.get('rate') || '1.0';

@@ -604,8 +604,83 @@
     return v;
   }
 
+  // Direct Client-Side WebSocket Microsoft Edge Neural AI Synthesizer
+  async function generateClientEdgeAudioUrl(text, voice = 'vi-VN-HoaiMyNeural', rate = 1.0, pitch = 1.0) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const TRUSTED_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
+        const ticks = Math.floor(Date.now() / 1000) + 11644473600;
+        const rounded = ticks - (ticks % 300);
+        const windowsTicks = rounded * 10000000;
+        const encoder = new TextEncoder();
+        const data = encoder.encode(`${windowsTicks}${TRUSTED_TOKEN}`);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hash = Array.from(new Uint8Array(hashBuffer))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('')
+          .toUpperCase();
+
+        const reqId = 'xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx'.replace(/[xy]/g, c => {
+          const r = Math.random() * 16 | 0;
+          return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
+        const connId = 'xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx'.replace(/[xy]/g, c => {
+          const r = Math.random() * 16 | 0;
+          return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
+
+        const ratePercent = `${rate >= 1 ? '+' : ''}${Math.round((rate - 1) * 100)}%`;
+        const pitchPercent = `${pitch >= 1 ? '+' : ''}${Math.round((pitch - 1) * 50)}Hz`;
+
+        const url = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_TOKEN}&Sec-MS-GEC=${hash}&Sec-MS-GEC-Version=1-143.0.3650.96&ConnectionId=${connId}`;
+
+        const ws = new WebSocket(url);
+        ws.binaryType = 'arraybuffer';
+
+        const audioChunks = [];
+        const timer = setTimeout(() => {
+          try { ws.close(); } catch {}
+          reject(new Error('Edge TTS timeout'));
+        }, 12000);
+
+        ws.onopen = () => {
+          const configMsg = 'Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}';
+          ws.send(configMsg);
+
+          const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="vi-VN"><voice name="${voice}"><prosody pitch="${pitchPercent}" rate="${ratePercent}">${escaped}</prosody></voice></speak>`;
+          const ssmlMsg = `X-RequestId:${reqId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`;
+          ws.send(ssmlMsg);
+        };
+
+        ws.onmessage = (e) => {
+          if (e.data instanceof ArrayBuffer) {
+            const view = new DataView(e.data);
+            const headerLen = view.getUint16(0);
+            if (e.data.byteLength > headerLen + 2) {
+              audioChunks.push(e.data.slice(headerLen + 2));
+            }
+          } else if (typeof e.data === 'string' && e.data.includes('Path:turn.end')) {
+            clearTimeout(timer);
+            try { ws.close(); } catch {}
+            const blob = new Blob(audioChunks, { type: 'audio/mpeg' });
+            resolve(URL.createObjectURL(blob));
+          }
+        };
+
+        ws.onerror = (err) => {
+          clearTimeout(timer);
+          try { ws.close(); } catch {}
+          reject(err);
+        };
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
   // Preload Audio for Next Paragraph (0-latency transition)
-  function preloadNextParagraphAudio() {
+  async function preloadNextParagraphAudio() {
     if (state.engine !== 'edge') return;
     const chap = chapters[state.chapterIndex];
     if (!chap || !chap.paragraphs) return;
@@ -618,16 +693,25 @@
     if (!nextText) return;
 
     const voiceName = getEdgeVoiceShortName();
-    const url = `${serverBaseUrl}/api/tts?text=${encodeURIComponent(nextText)}&voice=${encodeURIComponent(voiceName)}&rate=${state.rate}&pitch=${state.pitch}`;
-    
-    const audio = new Audio();
-    audio.preload = 'auto';
-    audio.src = url;
-    state.preloadedAudio = audio;
-    state.preloadParagraphIndex = nextParaIdx;
+    try {
+      const blobUrl = await generateClientEdgeAudioUrl(nextText, voiceName, state.rate, state.pitch);
+      const audio = new Audio();
+      audio.preload = 'auto';
+      audio.src = blobUrl;
+      state.preloadedAudio = audio;
+      state.preloadParagraphIndex = nextParaIdx;
+    } catch {
+      // Fallback preload to server endpoint
+      const url = `${serverBaseUrl}/api/tts?text=${encodeURIComponent(nextText)}&voice=${encodeURIComponent(voiceName)}&rate=${state.rate}&pitch=${state.pitch}`;
+      const audio = new Audio();
+      audio.preload = 'auto';
+      audio.src = url;
+      state.preloadedAudio = audio;
+      state.preloadParagraphIndex = nextParaIdx;
+    }
   }
 
-  function playParagraph(paraIdx) {
+  async function playParagraph(paraIdx) {
     const currentToken = ++state.token;
     const chap = chapters[state.chapterIndex];
     if (!chap || !chap.paragraphs) return;
@@ -673,13 +757,21 @@
         state.preloadParagraphIndex = -1;
       } else {
         const voiceName = getEdgeVoiceShortName();
-        const url = `${serverBaseUrl}/api/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voiceName)}&rate=${state.rate}&pitch=${state.pitch}`;
-        audio = new Audio(url);
+        try {
+          const blobUrl = await generateClientEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
+          audio = new Audio(blobUrl);
+        } catch {
+          // Server fallback
+          const url = `${serverBaseUrl}/api/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voiceName)}&rate=${state.rate}&pitch=${state.pitch}`;
+          audio = new Audio(url);
+        }
       }
+
+      if (state.token !== currentToken) return;
 
       state.currentAudio = audio;
       audio.volume = state.isMuted ? 0 : state.volume;
-      audio.playbackRate = 1.0; // Rate is SSML-processed on server
+      audio.playbackRate = 1.0;
 
       audio.ontimeupdate = () => {
         if (state.token !== currentToken) return;
@@ -695,7 +787,7 @@
 
       audio.onerror = () => {
         if (state.token !== currentToken) return;
-        showToast('⚠️ Lỗi kết nối Edge TTS server. Đang chuyển sang Web Speech...');
+        showToast('⚠️ Đang chuyển sang Web Speech...');
         state.engine = 'webspeech';
         populateVoiceSelect();
         updateEngineBadge();

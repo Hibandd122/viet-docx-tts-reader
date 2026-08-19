@@ -177,9 +177,15 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    // Static file serving
+    // Static file serving (check public/ then root)
     let safePath = pathname === '/' ? '/index.html' : pathname;
-    let filePath = resolve(root, `.${safePath}`);
+    let filePath = resolve(root, 'public', `.${safePath}`);
+    let fileStat = await stat(filePath).catch(() => null);
+
+    if (!fileStat || !fileStat.isFile()) {
+      filePath = resolve(root, `.${safePath}`);
+      fileStat = await stat(filePath).catch(() => null);
+    }
 
     if (!filePath.startsWith(root)) {
       res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -187,7 +193,6 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    const fileStat = await stat(filePath).catch(() => null);
     if (!fileStat || !fileStat.isFile()) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Not Found');

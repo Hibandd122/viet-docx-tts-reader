@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Vol 9 Vietnamese Reader",
+  "version": "1.0.0",
+  "description": "Đọc từng chương DOCX bằng Chrome OS Vietnamese 2.",
+  "permissions": ["tts"],
+  "background": { "service_worker": "tts-background.js" },
+  "action": { "default_title": "Vol 9 Reader" }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "viet-docx-tts-reader",
+  "version": "2.0.0",
+  "description": "Trình đọc truyện DOCX tiếng Việt cao cấp tích hợp Microsoft Edge Neural AI Voice, Web Speech, Bookmark và PWA",
+  "main": "server.mjs",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "serve": "node server.mjs"
+  },
+  "dependencies": {
+    "msedge-tts": "^2.0.7"
+  },
+  "keywords": [
+    "vietnamese",
+    "tts",
+    "docx-reader",
+    "edge-tts",
+    "reader",
+    "pwa"
+  ],
+  "author": "Hibandd122",
+  "license": "MIT"
+}

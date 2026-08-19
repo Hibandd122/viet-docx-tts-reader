@@ -86,10 +86,10 @@
       intervalId: null
     },
 
-    // Audio Elements for Edge TTS Preloading
-    currentAudio: null,
-    preloadedAudio: null,
-    preloadParagraphIndex: -1
+    // Master Audio Player (Single persistent instance to avoid mobile browser auto-play block)
+    masterAudio: new Audio(),
+    preloadedUrls: {}, // paragraphIndex -> blobUrl
+    wakeLock: null
   };
 
   // ==========================================================================
@@ -679,42 +679,91 @@
     });
   }
 
-  // Preload Audio for Next Paragraph (0-latency transition)
-  async function preloadNextParagraphAudio() {
+  // Preload next 2 paragraphs in background for zero-latency gapless playback
+  async function preloadNextParagraphs(currentIdx) {
     if (state.engine !== 'edge') return;
     const chap = chapters[state.chapterIndex];
     if (!chap || !chap.paragraphs) return;
-
-    const nextParaIdx = state.paragraphIndex + 1;
-    if (nextParaIdx >= chap.paragraphs.length) return;
-    if (state.preloadParagraphIndex === nextParaIdx && state.preloadedAudio) return;
-
-    const nextText = chap.paragraphs[nextParaIdx];
-    if (!nextText) return;
-
     const voiceName = getEdgeVoiceShortName();
-    try {
-      const blobUrl = await generateClientEdgeAudioUrl(nextText, voiceName, state.rate, state.pitch);
-      const audio = new Audio();
-      audio.preload = 'auto';
-      audio.src = blobUrl;
-      state.preloadedAudio = audio;
-      state.preloadParagraphIndex = nextParaIdx;
-    } catch {
-      // Fallback preload to server endpoint
-      const url = `${serverBaseUrl}/api/tts?text=${encodeURIComponent(nextText)}&voice=${encodeURIComponent(voiceName)}&rate=${state.rate}&pitch=${state.pitch}`;
-      const audio = new Audio();
-      audio.preload = 'auto';
-      audio.src = url;
-      state.preloadedAudio = audio;
-      state.preloadParagraphIndex = nextParaIdx;
+
+    for (let offset = 1; offset <= 2; offset++) {
+      const targetIdx = currentIdx + offset;
+      if (targetIdx >= chap.paragraphs.length) break;
+      if (state.preloadedUrls[targetIdx]) continue;
+
+      const text = chap.paragraphs[targetIdx]?.trim();
+      if (!text) continue;
+
+      try {
+        const blobUrl = await generateClientEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
+        state.preloadedUrls[targetIdx] = blobUrl;
+      } catch {
+        // Ignored in background preload
+      }
     }
+  }
+
+  // MediaSession API Integration for Lock Screen and Background Playback
+  function updateMediaSession(chapTitle, paraIndex, totalParas) {
+    if (!('mediaSession' in navigator)) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: chapTitle || 'Vol 9 · Tiểu Thuyết Tiếng Việt',
+        artist: `Đoạn ${paraIndex + 1}/${totalParas}`,
+        album: 'Vol 9 Web Reader Pro',
+        artwork: [
+          { src: 'favicon.png', sizes: '512x512', type: 'image/png' }
+        ]
+      });
+      navigator.mediaSession.playbackState = state.isPlaying && !state.isPaused ? 'playing' : 'paused';
+
+      navigator.mediaSession.setActionHandler('play', () => resumePlayback());
+      navigator.mediaSession.setActionHandler('pause', () => pausePlayback());
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        const prevIdx = Math.max(0, state.paragraphIndex - 1);
+        playParagraph(prevIdx);
+      });
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        const chap = chapters[state.chapterIndex];
+        const nextIdx = Math.min((chap?.paragraphs?.length || 1) - 1, state.paragraphIndex + 1);
+        playParagraph(nextIdx);
+      });
+    } catch {}
+  }
+
+  // WakeLock to prevent screen timeout while listening
+  async function requestWakeLock() {
+    if ('wakeLock' in navigator && !state.wakeLock) {
+      try {
+        state.wakeLock = await navigator.wakeLock.request('screen');
+        state.wakeLock.addEventListener('release', () => {
+          state.wakeLock = null;
+        });
+      } catch {}
+    }
+  }
+
+  // Web Speech Garbage-Collection Keepalive Timer
+  let speechKeepAliveTimer = null;
+  function keepSpeechAlive() {
+    clearInterval(speechKeepAliveTimer);
+    speechKeepAliveTimer = setInterval(() => {
+      if (state.engine === 'webspeech' && state.isPlaying && !state.isPaused && speechApi && speechApi.speaking) {
+        speechApi.pause();
+        speechApi.resume();
+      }
+    }, 8000);
   }
 
   async function playParagraph(paraIdx) {
     const currentToken = ++state.token;
     const chap = chapters[state.chapterIndex];
-    if (!chap || !chap.paragraphs) return;
+    if (!chap || !chap.paragraphs || !chap.paragraphs.length) return;
+
+    // Skip empty paragraphs automatically
+    while (paraIdx < chap.paragraphs.length && !chap.paragraphs[paraIdx]?.trim()) {
+      paraIdx++;
+    }
 
     if (paraIdx >= chap.paragraphs.length) {
       // Completed current chapter
@@ -743,33 +792,25 @@
     state.isPaused = false;
     syncPlayerControlsUI();
     markActiveParagraph(paraIdx);
+    saveReadingProgress(state.chapterIndex, paraIdx);
 
-    const text = chap.paragraphs[paraIdx];
+    const text = chap.paragraphs[paraIdx].trim();
     const snippet = text.slice(0, 80) + (text.length > 80 ? '…' : '');
     updateNowReadingUI(`Đang đọc đoạn ${paraIdx + 1}/${chap.paragraphs.length}: "${snippet}"`);
+    updateMediaSession(chap.title, paraIdx, chap.paragraphs.length);
+    requestWakeLock();
+
+    // Auto scroll to active paragraph if enabled
+    if (state.autoScroll) {
+      const el = $(`para-${paraIdx}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
 
     // --- ENGINE 1: EDGE NEURAL TTS ---
     if (state.engine === 'edge') {
-      let audio = null;
-      if (state.preloadParagraphIndex === paraIdx && state.preloadedAudio) {
-        audio = state.preloadedAudio;
-        state.preloadedAudio = null;
-        state.preloadParagraphIndex = -1;
-      } else {
-        const voiceName = getEdgeVoiceShortName();
-        try {
-          const blobUrl = await generateClientEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
-          audio = new Audio(blobUrl);
-        } catch {
-          // Server fallback
-          const url = `${serverBaseUrl}/api/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voiceName)}&rate=${state.rate}&pitch=${state.pitch}`;
-          audio = new Audio(url);
-        }
-      }
+      const voiceName = getEdgeVoiceShortName();
+      const audio = state.masterAudio;
 
-      if (state.token !== currentToken) return;
-
-      state.currentAudio = audio;
       audio.volume = state.isMuted ? 0 : state.volume;
       audio.playbackRate = 1.0;
 
@@ -785,21 +826,36 @@
         playParagraph(state.paragraphIndex + 1);
       };
 
-      audio.onerror = () => {
+      audio.onerror = (e) => {
         if (state.token !== currentToken) return;
-        showToast('⚠️ Đang chuyển sang Web Speech...');
-        state.engine = 'webspeech';
-        populateVoiceSelect();
-        updateEngineBadge();
-        playParagraph(state.paragraphIndex);
+        console.warn('Edge TTS playback notice, advancing next...', e);
+        setTimeout(() => {
+          if (state.token === currentToken && state.isPlaying) {
+            playParagraph(state.paragraphIndex + 1);
+          }
+        }, 400);
       };
 
+      // Check preloaded cache first for instant 0ms playback
+      let audioUrl = state.preloadedUrls[paraIdx];
+      if (!audioUrl) {
+        try {
+          audioUrl = await generateClientEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
+          state.preloadedUrls[paraIdx] = audioUrl;
+        } catch {
+          audioUrl = `${serverBaseUrl}/api/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voiceName)}&rate=${state.rate}&pitch=${state.pitch}`;
+        }
+      }
+
+      if (state.token !== currentToken) return;
+
+      audio.src = audioUrl;
       audio.play().catch(err => {
-        console.warn('Audio play error:', err);
+        console.warn('Audio play() catch:', err);
       });
 
-      // Preload next paragraph
-      preloadNextParagraphAudio();
+      // Eagerly preload next 2 paragraphs
+      preloadNextParagraphs(paraIdx);
       return;
     }
 
@@ -821,6 +877,8 @@
       const selectedVoice = state.webVoices.find(v => v.name === state.voice);
       if (selectedVoice) utterance.voice = selectedVoice;
 
+      window._currentUtterance = utterance; // Prevent garbage collection bug
+
       utterance.onend = () => {
         if (state.token !== currentToken) return;
         playParagraph(state.paragraphIndex + 1);
@@ -829,11 +887,15 @@
       utterance.onerror = (e) => {
         if (state.token !== currentToken) return;
         console.error('Speech error:', e);
-        showToast(`Lỗi phát âm thanh: ${e.error || 'không thể đọc'}`);
-        stopPlayback();
+        setTimeout(() => {
+          if (state.token === currentToken && state.isPlaying) {
+            playParagraph(state.paragraphIndex + 1);
+          }
+        }, 400);
       };
 
       speechApi.speak(utterance);
+      keepSpeechAlive();
       return;
     }
 
@@ -861,14 +923,15 @@
     state.isPaused = true;
     syncPlayerControlsUI();
 
-    if (state.engine === 'edge' && state.currentAudio) {
-      state.currentAudio.pause();
+    if (state.engine === 'edge') {
+      state.masterAudio.pause();
     } else if (state.engine === 'webspeech' && speechApi) {
       speechApi.pause();
     } else if (state.engine === 'chrome-ext' && isExtension) {
       chrome.runtime.sendMessage({ type: 'TTS_CONTROL', action: 'pause' });
     }
 
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
     updateStatus('Đã tạm dừng');
   }
 
@@ -882,15 +945,17 @@
       state.isPaused = false;
       syncPlayerControlsUI();
 
-      if (state.engine === 'edge' && state.currentAudio) {
-        state.currentAudio.play().catch(() => {});
+      if (state.engine === 'edge') {
+        state.masterAudio.play().catch(() => playParagraph(state.paragraphIndex));
       } else if (state.engine === 'webspeech' && speechApi) {
-        speechApi.resume();
+        if (speechApi.paused) speechApi.resume();
+        else playParagraph(state.paragraphIndex);
       } else if (state.engine === 'chrome-ext' && isExtension) {
         chrome.runtime.sendMessage({ type: 'TTS_CONTROL', action: 'resume' });
       }
 
-      updateStatus('Đang tiếp tục đọc');
+      if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+      updateStatus('Đang đọc');
     }
   }
 
@@ -906,10 +971,10 @@
     state.isPlaying = false;
     state.isPaused = false;
 
-    if (state.currentAudio) {
-      state.currentAudio.pause();
-      state.currentAudio.src = '';
-      state.currentAudio = null;
+    if (state.masterAudio) {
+      state.masterAudio.pause();
+      state.masterAudio.removeAttribute('src');
+      state.masterAudio.load();
     }
     if (speechApi) {
       speechApi.cancel();
@@ -917,9 +982,11 @@
     if (isExtension) {
       chrome.runtime.sendMessage({ type: 'TTS_CONTROL', action: 'stop' });
     }
+    clearInterval(speechKeepAliveTimer);
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
 
-    $$('.book-content p.reading-now').forEach(p => p.classList.remove('reading-now'));
     syncPlayerControlsUI();
+    markActiveParagraph(-1);
     updatePlayerTimeline(0, 1);
     updateStatus('Đã dừng');
   }

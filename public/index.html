@@ -96,10 +96,20 @@
     </div>
   </header>
 
+  <!-- Mobile Sidebar Backdrop -->
+  <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
+
   <!-- Main App Layout -->
   <div class="layout" id="mainLayout">
     <!-- Sidebar / Navigation Drawer -->
     <aside class="sidebar" id="sidebar">
+      <div class="sidebar-mobile-header">
+        <span class="sidebar-mobile-title">Mục Lục & Cài Đặt</span>
+        <button id="sidebarCloseBtn" class="icon-btn sidebar-close-btn" aria-label="Đóng bảng">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
       <div class="sidebar-tabs">
         <button id="tabChaptersBtn" class="tab-btn active" data-tab="chapters">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
@@ -398,34 +408,42 @@
       <div class="player-center">
         <div class="controls-row">
           <button id="playerPrevParaBtn" class="ctrl-btn" title="Đoạn trước (Mũi tên Trái)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
           </button>
 
-          <button id="playerSeekBackBtn" class="ctrl-btn" title="Lùi lại đoạn trước">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+          <button id="playerSeekBackBtn" class="ctrl-btn" title="Lùi lại 5 giây / Đoạn trước">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+              <path d="M3 3v5h5"></path>
+              <text x="12" y="15.5" font-size="7.5" font-family="sans-serif" font-weight="800" fill="currentColor" stroke="none" text-anchor="middle">5</text>
+            </svg>
           </button>
 
           <button id="playerPlayPauseBtn" class="ctrl-btn play-main-btn" title="Phát / Tạm dừng (Space)">
-            <svg id="playIconSvg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-            <svg id="pauseIconSvg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" hidden><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+            <svg id="playIconSvg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
+            <svg id="pauseIconSvg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" hidden><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>
           </button>
 
-          <button id="playerSeekFwdBtn" class="ctrl-btn" title="Chuyển sang đoạn tiếp theo">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+          <button id="playerSeekFwdBtn" class="ctrl-btn" title="Tua tới 5 giây / Đoạn sau">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+              <path d="M21 3v5h-5"></path>
+              <text x="12" y="15.5" font-size="7.5" font-family="sans-serif" font-weight="800" fill="currentColor" stroke="none" text-anchor="middle">5</text>
+            </svg>
           </button>
 
           <button id="playerNextParaBtn" class="ctrl-btn" title="Đoạn kế tiếp (Mũi tên Phải)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
           </button>
 
           <button id="playerStopBtn" class="ctrl-btn" title="Dừng hẳn (Esc)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
           </button>
         </div>
 
         <div class="player-timeline">
           <span id="playerCurrentTime" class="time-label">0:00</span>
-          <div class="timeline-bar" id="timelineBar">
+          <div class="timeline-bar" id="timelineBar" role="slider" aria-label="Tiến độ âm thanh" tabindex="0">
             <div id="timelineFill" class="timeline-fill"></div>
             <div id="timelineBuffer" class="timeline-buffer"></div>
           </div>
@@ -437,23 +455,29 @@
       <div class="player-right">
         <!-- Quick Speed Pill -->
         <button id="speedPillBtn" class="player-pill-btn" title="Đổi tốc độ đọc">
-          <span id="speedPillLabel">1.0×</span>
+          <span id="speedPillLabel">1.00×</span>
         </button>
 
         <!-- Quick Sleep Timer Badge in Player -->
         <button id="playerTimerPillBtn" class="player-pill-btn" title="Hẹn giờ tắt">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
           <span id="playerTimerLabel">Tắt</span>
         </button>
 
-        <!-- Quick Volume Button -->
-        <div class="volume-control-wrap">
-          <button id="volumeMuteBtn" class="ctrl-btn volume-btn" title="Âm lượng">
-            <svg id="volumeHighSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-            <svg id="volumeMuteSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" hidden><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+        <!-- Quick Volume Button & Popover -->
+        <div class="volume-control-wrap" id="volumeControlWrap">
+          <button id="volumeMuteBtn" class="ctrl-btn volume-btn" aria-label="Âm lượng" title="Chỉnh âm lượng">
+            <svg id="volumeHighSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
+            <svg id="volumeMuteSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
           </button>
-          <div class="volume-slider-popup" id="volumePopup">
-            <input id="quickVolumeSlider" type="range" min="0" max="1" step="0.05" value="1" orient="vertical">
+          <div class="volume-popover" id="volumePopover" hidden>
+            <div class="volume-popover-header">
+              <span class="volume-popover-title">Âm lượng</span>
+              <span id="quickVolumePercent" class="volume-pct-badge">100%</span>
+            </div>
+            <div class="volume-popover-slider-row">
+              <input id="quickVolumeSlider" class="volume-range-input" type="range" min="0" max="1" step="0.02" value="1" aria-label="Mức âm lượng">
+            </div>
           </div>
         </div>
       </div>

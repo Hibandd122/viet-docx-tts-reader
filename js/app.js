@@ -957,14 +957,60 @@
   }
 
   // ==========================================================================
+  // Helper: Toggle Sidebar Drawer for Desktop and Mobile
+  function toggleSidebar(forceState) {
+    const isMobile = window.innerWidth <= 768;
+    if (isMobile) {
+      const open = forceState !== undefined ? forceState : !document.body.classList.contains('sidebar-open');
+      document.body.classList.toggle('sidebar-open', open);
+      const backdrop = $('sidebarBackdrop');
+      if (backdrop) backdrop.hidden = !open;
+    } else {
+      state.isSidebarOpen = forceState !== undefined ? forceState : !state.isSidebarOpen;
+      document.body.classList.toggle('sidebar-closed', !state.isSidebarOpen);
+    }
+  }
+
+  // Helper: Synchronize Volume UI across popover, settings panel and audio element
+  function applyVolumeChange(newVal, toggleMute = false) {
+    if (toggleMute) {
+      state.isMuted = !state.isMuted;
+    } else {
+      state.volume = Math.max(0, Math.min(1, Number(newVal)));
+      state.isMuted = state.volume === 0;
+    }
+
+    const pct = Math.round(state.volume * 100);
+    const effectiveVol = state.isMuted ? 0 : state.volume;
+
+    const volSlider = $('quickVolumeSlider');
+    const volSettingsSlider = $('volume');
+    const volPctBadge = $('quickVolumePercent');
+    const volValLabel = $('volumeValue');
+    const highSvg = $('volumeHighSvg');
+    const muteSvg = $('volumeMuteSvg');
+
+    if (volSlider) volSlider.value = state.volume;
+    if (volSettingsSlider) volSettingsSlider.value = state.volume;
+    if (volPctBadge) volPctBadge.textContent = state.isMuted ? '0%' : `${pct}%`;
+    if (volValLabel) volValLabel.textContent = `${pct}%`;
+    if (highSvg) highSvg.hidden = state.isMuted || state.volume === 0;
+    if (muteSvg) muteSvg.hidden = !state.isMuted && state.volume > 0;
+
+    if (state.currentAudio) {
+      state.currentAudio.volume = effectiveVol;
+    }
+    saveSettings({ volume: state.volume });
+  }
+
+  // ==========================================================================
   // EVENT LISTENERS & WIRING
   // ==========================================================================
   function initEventListeners() {
-    // --- Topbar Actions ---
-    $('sidebarToggleBtn')?.addEventListener('click', () => {
-      state.isSidebarOpen = !state.isSidebarOpen;
-      document.body.classList.toggle('sidebar-closed', !state.isSidebarOpen);
-    });
+    // --- Topbar Actions & Mobile Drawer ---
+    $('sidebarToggleBtn')?.addEventListener('click', () => toggleSidebar());
+    $('sidebarCloseBtn')?.addEventListener('click', () => toggleSidebar(false));
+    $('sidebarBackdrop')?.addEventListener('click', () => toggleSidebar(false));
 
     $('zenModeBtn')?.addEventListener('click', () => {
       state.isZenMode = !state.isZenMode;
@@ -973,15 +1019,18 @@
     });
 
     $('quickSearchBtn')?.addEventListener('click', () => {
+      toggleSidebar(true);
       switchSidebarTab('chapters');
       $('chapterSearch')?.focus();
     });
 
     $('bookmarksBtn')?.addEventListener('click', () => {
+      toggleSidebar(true);
       switchSidebarTab('bookmarks');
     });
 
     $('settingsToggleBtn')?.addEventListener('click', () => {
+      toggleSidebar(true);
       switchSidebarTab('settings');
     });
 
@@ -1007,6 +1056,10 @@
         const menu = $('themeDropdownMenu');
         if (menu) menu.hidden = true;
       }
+      if (!e.target.closest('#volumeControlWrap')) {
+        const popover = $('volumePopover');
+        if (popover) popover.hidden = true;
+      }
     });
 
     // --- Sidebar Tabs ---
@@ -1028,6 +1081,9 @@
       if (!card) return;
       const idx = Number(card.dataset.chapterIndex);
       selectChapter(idx, true);
+      if (window.innerWidth <= 768) {
+        toggleSidebar(false);
+      }
     });
 
     // Bookmark list actions
@@ -1049,6 +1105,9 @@
         state.paragraphIndex = paraIdx;
         markActiveParagraph(paraIdx);
         showToast(`Đã chuyển tới đoạn ${paraIdx + 1}`);
+        if (window.innerWidth <= 768) {
+          toggleSidebar(false);
+        }
       }
     });
 
@@ -1121,36 +1180,29 @@
       });
     });
 
-    // Pitch & Volume Sliders
+    // Pitch Slider
     $('pitch')?.addEventListener('input', (e) => {
       state.pitch = Number(e.target.value);
       $('pitchValue').textContent = state.pitch.toFixed(2);
       saveSettings({ pitch: state.pitch });
     });
 
+    // Volume Sliders & Popover
     $('volume')?.addEventListener('input', (e) => {
-      state.volume = Number(e.target.value);
-      $('volumeValue').textContent = `${Math.round(state.volume * 100)}%`;
-      if ($('quickVolumeSlider')) $('quickVolumeSlider').value = state.volume;
-      if (state.currentAudio) state.currentAudio.volume = state.volume;
-      saveSettings({ volume: state.volume });
+      applyVolumeChange(e.target.value);
     });
 
     $('quickVolumeSlider')?.addEventListener('input', (e) => {
-      state.volume = Number(e.target.value);
-      $('volume').value = state.volume;
-      $('volumeValue').textContent = `${Math.round(state.volume * 100)}%`;
-      if (state.currentAudio) state.currentAudio.volume = state.volume;
-      saveSettings({ volume: state.volume });
+      applyVolumeChange(e.target.value);
     });
 
-    // Mute Button Toggle
-    $('volumeMuteBtn')?.addEventListener('click', () => {
-      state.isMuted = !state.isMuted;
-      $('volumeHighSvg').hidden = state.isMuted;
-      $('volumeMuteSvg').hidden = !state.isMuted;
-      if (state.currentAudio) state.currentAudio.volume = state.isMuted ? 0 : state.volume;
-      showToast(state.isMuted ? 'Đã tắt tiếng' : 'Đã bật tiếng');
+    // Toggle Volume Popover on click
+    $('volumeMuteBtn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const popover = $('volumePopover');
+      if (popover) {
+        popover.hidden = !popover.hidden;
+      }
     });
 
     // Typography Settings

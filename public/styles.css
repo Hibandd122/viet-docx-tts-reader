@@ -1490,27 +1490,58 @@ body:not(.no-drop-cap) .book-content > p:first-of-type::first-letter {
 .volume-control-wrap {
   position: relative;
 }
-.volume-slider-popup {
+.volume-popover {
   position: absolute;
-  bottom: calc(100% + 12px);
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 12px 8px;
+  bottom: calc(100% + 14px);
+  right: 0;
+  width: 180px;
+  padding: 12px 14px;
   background: var(--bg-surface);
   border: 1px solid var(--border-medium);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  display: none;
-  z-index: 100;
-}
-.volume-control-wrap:hover .volume-slider-popup {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 1200;
   display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: fadeInDown 0.18s ease-out;
 }
-.volume-slider-popup input[orient="vertical"] {
-  writing-mode: vertical-lr;
-  direction: rtl;
-  width: 6px;
-  height: 90px;
+.volume-popover[hidden] {
+  display: none !important;
+}
+.volume-popover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.volume-popover-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+.volume-pct-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  background: var(--accent-soft);
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+}
+.volume-popover-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.volume-range-input {
+  flex: 1;
+  height: 6px;
+  background: var(--border-subtle);
+  border-radius: var(--radius-pill);
+  outline: none;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
 }
 
 /* ==========================================================================
@@ -1732,6 +1763,23 @@ body.zen-mode .reader-container {
   animation: slideUpFade 0.25s ease-out;
 }
 
+/* Mobile Sidebar Drawer Header & Backdrop */
+.sidebar-mobile-header {
+  display: none;
+}
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 1500;
+  animation: fadeIn 0.2s ease-out;
+}
+.sidebar-backdrop[hidden] {
+  display: none;
+}
+
 /* ==========================================================================
    ANIMATIONS
    ========================================================================== */
@@ -1760,66 +1808,164 @@ body.zen-mode .reader-container {
 }
 
 /* ==========================================================================
-   RESPONSIVE MEDIA QUERIES
+   RESPONSIVE MEDIA QUERIES (MOBILE OPTIMIZATIONS)
    ========================================================================== */
 @media (max-width: 1024px) {
   .layout {
-    grid-template-columns: 300px minmax(0, 1fr);
-    gap: 20px;
-    padding: 16px 20px 140px;
+    grid-template-columns: 290px minmax(0, 1fr);
+    gap: 16px;
+    padding: 16px 16px 140px;
   }
   .player-left {
     max-width: 200px;
-    min-width: 150px;
+    min-width: 140px;
   }
 }
 
 @media (max-width: 768px) {
   .topbar {
-    padding: 10px 16px;
+    padding: 8px 12px;
+    height: 54px;
+  }
+  .topbar-center {
+    display: none;
   }
   .btn-label {
     display: none;
   }
+  .topbar-brand {
+    gap: 8px;
+  }
+  .brand-title {
+    font-size: 15px;
+  }
+  .brand-eyebrow {
+    font-size: 9px;
+  }
+  
   .layout {
+    display: block;
+    padding: 12px 12px 140px;
+  }
+
+  /* Off-canvas Sliding Drawer Sidebar for Mobile */
+  .sidebar-mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .sidebar-mobile-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .sidebar-close-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(340px, 86vw);
+    height: 100vh;
+    max-height: 100vh;
+    z-index: 1600;
+    background: var(--bg-surface);
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+    border-right: 1px solid var(--border-medium);
+    transform: translateX(-105%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
-    padding: 12px 14px 150px;
+    overflow: hidden;
   }
-  .sidebar {
-    position: static;
-    height: auto;
-    max-height: 520px;
+  body.sidebar-open .sidebar {
+    transform: translateX(0);
   }
   body.sidebar-closed .sidebar {
-    display: none;
+    transform: translateX(-105%);
   }
+
   .reader-container {
-    padding: 24px 16px 40px;
+    padding: 20px 14px 40px;
+    border-radius: var(--radius-md);
   }
+  .chapter-heading {
+    font-size: 22px;
+  }
+  .book-content {
+    font-size: clamp(16px, 4.5vw, 19px);
+    line-height: 1.8;
+  }
+  .book-content p {
+    padding: 8px 10px;
+    margin-bottom: 1.15em;
+  }
+  .book-content p.reading-now {
+    padding: 10px 12px;
+  }
+
   .chapter-nav-footer {
     grid-template-columns: 1fr;
   }
   .shortcuts-grid {
     grid-template-columns: 1fr;
   }
+
+  /* Audio Player Sticky Mobile Dock */
   .audio-player {
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-    padding: 10px 14px;
-    width: calc(100% - 20px);
+    bottom: max(8px, env(safe-area-inset-bottom, 8px));
+    padding: 10px 12px;
+    width: calc(100% - 16px);
+    border-radius: var(--radius-lg);
   }
   .player-inner {
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
   }
   .player-left {
     max-width: 100%;
     min-width: 100%;
     justify-content: space-between;
   }
+  .player-snippet {
+    max-width: 220px;
+    font-size: 11.5px;
+  }
+  .player-center {
+    width: 100%;
+    max-width: 100%;
+  }
+  .controls-row {
+    width: 100%;
+    justify-content: space-around;
+    gap: 4px;
+  }
+  .ctrl-btn {
+    width: 38px;
+    height: 38px;
+  }
+  .ctrl-btn.play-main-btn {
+    width: 48px;
+    height: 48px;
+  }
   .player-right {
     width: 100%;
-    justify-content: space-between;
+    min-width: 100%;
+    justify-content: space-around;
+    gap: 6px;
+  }
+  .volume-popover {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 220px;
   }
 }
+
 

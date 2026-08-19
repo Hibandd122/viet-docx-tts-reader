@@ -595,6 +595,15 @@
     select.value = state.voice;
   }
 
+  function getEdgeVoiceShortName() {
+    let v = state.voice;
+    if (!v || typeof v !== 'string' || !v.includes('Neural')) {
+      if (/NamMinh|Nam Minh|Male|Nam/i.test(v)) return 'vi-VN-NamMinhNeural';
+      return 'vi-VN-HoaiMyNeural';
+    }
+    return v;
+  }
+
   // Preload Audio for Next Paragraph (0-latency transition)
   function preloadNextParagraphAudio() {
     if (state.engine !== 'edge') return;
@@ -608,7 +617,8 @@
     const nextText = chap.paragraphs[nextParaIdx];
     if (!nextText) return;
 
-    const url = `${serverBaseUrl}/tts?text=${encodeURIComponent(nextText)}&voice=${encodeURIComponent(state.voice)}&rate=${state.rate}&pitch=${state.pitch}`;
+    const voiceName = getEdgeVoiceShortName();
+    const url = `${serverBaseUrl}/api/tts?text=${encodeURIComponent(nextText)}&voice=${encodeURIComponent(voiceName)}&rate=${state.rate}&pitch=${state.pitch}`;
     
     const audio = new Audio();
     audio.preload = 'auto';
@@ -662,7 +672,8 @@
         state.preloadedAudio = null;
         state.preloadParagraphIndex = -1;
       } else {
-        const url = `${serverBaseUrl}/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(state.voice)}&rate=${state.rate}&pitch=${state.pitch}`;
+        const voiceName = getEdgeVoiceShortName();
+        const url = `${serverBaseUrl}/api/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voiceName)}&rate=${state.rate}&pitch=${state.pitch}`;
         audio = new Audio(url);
       }
 
@@ -1140,9 +1151,10 @@
     $('voiceTestBtn')?.addEventListener('click', () => {
       const testText = 'Xin chào. Đây là bản thử giọng đọc AI tiếng Việt chất lượng cao của trình đọc Vol 9.';
       if (state.engine === 'edge') {
-        const url = `${serverBaseUrl}/tts?text=${encodeURIComponent(testText)}&voice=${encodeURIComponent(state.voice)}&rate=${state.rate}&pitch=${state.pitch}`;
+        const voiceName = getEdgeVoiceShortName();
+        const url = `${serverBaseUrl}/api/tts?text=${encodeURIComponent(testText)}&voice=${encodeURIComponent(voiceName)}&rate=${state.rate}&pitch=${state.pitch}`;
         const a = new Audio(url);
-        a.volume = state.volume;
+        a.volume = state.isMuted ? 0 : state.volume;
         a.play().then(() => showToast('Đang phát thử giọng Edge AI…')).catch(err => {
           showToast('Lỗi phát thử giọng: ' + err.message);
         });

@@ -99,7 +99,7 @@ const server = createServer(async (req, res) => {
     // Endpoint: /tts hoặc /api/tts
     if (pathname === '/tts' || pathname === '/api/tts') {
       const text = (url.searchParams.get('text') || '').trim();
-      const voice = url.searchParams.get('voice') || 'vi-VN-HoaiMyNeural';
+      const rawVoice = url.searchParams.get('voice') || 'vi-VN-HoaiMyNeural';
       const rateParam = url.searchParams.get('rate') || '1.0';
       const pitchParam = url.searchParams.get('pitch') || '1.0';
 
@@ -108,6 +108,12 @@ const server = createServer(async (req, res) => {
         res.end('Missing text parameter');
         return;
       }
+
+      // Sanitize voice ShortName
+      let voice = 'vi-VN-HoaiMyNeural';
+      if (/NamMinh|Nam Minh|Male|Nam/i.test(rawVoice)) voice = 'vi-VN-NamMinhNeural';
+      else if (/HoaiMy|Hoài My|Female|Nữ/i.test(rawVoice)) voice = 'vi-VN-HoaiMyNeural';
+      else if (rawVoice.includes('Neural')) voice = rawVoice;
 
       // Convert rate (e.g. 1.15) to percentage string (e.g. "+15%")
       const rateNum = Math.max(0.5, Math.min(2.0, parseFloat(rateParam) || 1.0));
@@ -132,7 +138,13 @@ const server = createServer(async (req, res) => {
       }
 
       try {
-        await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+        try {
+          await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+        } catch {
+          voice = 'vi-VN-HoaiMyNeural';
+          await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+        }
+
         const { audioStream } = tts.toStream(text, {
           rate: ratePercent,
           pitch: pitchPercent

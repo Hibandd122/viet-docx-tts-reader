@@ -1,5 +1,5 @@
 const CACHE_NAME = 'vol9-reader-v1';
-const SHELL = ['./', './index.html', './styles.css', './app.js', './chapters.js', './manifest.webmanifest'];
+const SHELL = ['./', './index.html', './styles.css', './js/app.js', './js/chapters.js', './manifest.webmanifest'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));

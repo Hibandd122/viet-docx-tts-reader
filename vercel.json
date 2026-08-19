@@ -1,5 +1,4 @@
 {
-  "outputDirectory": "public",
   "headers": [
     {
       "source": "/sw.js",
@@ -14,12 +13,7 @@
       ]
     }
   ],
-  "cleanUrls": true,
   "rewrites": [
-    { "source": "/", "destination": "/index.html" },
-    { "source": "/tts", "destination": "/api/tts" },
-    { "source": "/api/tts", "destination": "/api/tts" },
-    { "source": "/api/voices", "destination": "/api/voices" },
-    { "source": "/api/status", "destination": "/api/status" }
+    { "source": "/tts", "destination": "/api/tts" }
   ]
 }

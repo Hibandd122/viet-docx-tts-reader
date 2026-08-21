@@ -619,138 +619,37 @@
     return v;
   }
 
-  const TRUSTED_CLIENT_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
-
-  async function getClientSecMsGec() {
-    const ticks = Math.floor(Date.now() / 1000) + 11644473600;
-    const rounded = ticks - (ticks % 300);
-    const windowsTicks = rounded * 10000000;
-    const encoder = new TextEncoder();
-    const data = encoder.encode(`${windowsTicks}${TRUSTED_CLIENT_TOKEN}`);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-  }
-
   function buildServerEdgeAudioUrl(text, voice, rate, pitch) {
     return `${serverBaseUrl}/api/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voice)}&rate=${rate}&pitch=${pitch}`;
-  }
-
-  // Direct in-browser WebSocket Edge Neural AI synthesizer (0ms latency, zero server dependence)
-  function generateClientEdgeAudioUrl(text, voice = 'vi-VN-HoaiMyNeural', rate = 1.0, pitch = 1.0) {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const hash = await getClientSecMsGec();
-        const randHex = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : 'xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx'.replace(/[xy]/g, c => {
-          const r = Math.random() * 16 | 0;
-          return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-        }));
-        const connId = randHex();
-        const reqId = randHex();
-
-        const rateNum = Math.max(0.5, Math.min(2.0, Number(rate) || 1.0));
-        const ratePercent = `${rateNum >= 1 ? '+' : ''}${Math.round((rateNum - 1) * 100)}%`;
-        const pitchNum = Math.max(0.5, Math.min(1.5, Number(pitch) || 1.0));
-        const pitchPercent = `${pitchNum >= 1 ? '+' : ''}${Math.round((pitchNum - 1) * 50)}Hz`;
-
-        const url = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}&Sec-MS-GEC=${hash}&Sec-MS-GEC-Version=1-143.0.3650.96&ConnectionId=${connId}`;
-
-        const ws = new WebSocket(url);
-        ws.binaryType = 'arraybuffer';
-        const audioChunks = [];
-        let isDone = false;
-
-        const timer = setTimeout(() => {
-          if (isDone) return;
-          isDone = true;
-          try { ws.close(); } catch {}
-          reject(new Error('client-edge-ws-timeout'));
-        }, 12000);
-
-        ws.onopen = () => {
-          const configMsg = 'Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}';
-          ws.send(configMsg);
-
-          const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="vi-VN"><voice name="${voice}"><prosody pitch="${pitchPercent}" rate="${ratePercent}">${escaped}</prosody></voice></speak>`;
-          const ssmlMsg = `X-RequestId:${reqId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`;
-          ws.send(ssmlMsg);
-        };
-
-        ws.onmessage = (event) => {
-          if (event.data instanceof ArrayBuffer) {
-            const view = new DataView(event.data);
-            if (event.data.byteLength >= 2) {
-              const headerLen = view.getUint16(0, false);
-              if (event.data.byteLength > headerLen + 2) {
-                audioChunks.push(event.data.slice(headerLen + 2));
-              }
-            }
-          } else if (typeof event.data === 'string') {
-            if (event.data.includes('Path:turn.end')) {
-              if (isDone) return;
-              isDone = true;
-              clearTimeout(timer);
-              try { ws.close(); } catch {}
-              if (!audioChunks.length) {
-                return reject(new Error('empty-edge-audio'));
-              }
-              const blob = new Blob(audioChunks, { type: 'audio/mpeg' });
-              const objectUrl = URL.createObjectURL(blob);
-              resolve(objectUrl);
-            }
-          }
-        };
-
-        ws.onerror = (err) => {
-          if (isDone) return;
-          isDone = true;
-          clearTimeout(timer);
-          try { ws.close(); } catch {}
-          reject(err);
-        };
-
-        ws.onclose = () => {
-          if (isDone) return;
-          isDone = true;
-          clearTimeout(timer);
-          if (audioChunks.length > 0) {
-            const blob = new Blob(audioChunks, { type: 'audio/mpeg' });
-            resolve(URL.createObjectURL(blob));
-          } else {
-            reject(new Error('ws-closed-prematurely'));
-          }
-        };
-      } catch (err) {
-        reject(err);
-      }
-    });
   }
 
   function preloadServerEdgeAudio(paraIdx, text, voiceName) {
     if (state.audioPreloadPromises[paraIdx]) return state.audioPreloadPromises[paraIdx];
 
-    // Try client-side direct WebSocket synthesis first, then fallback to server endpoint
-    state.audioPreloadPromises[paraIdx] = generateClientEdgeAudioUrl(text, voiceName, state.rate, state.pitch)
-      .then(blobUrl => {
-        state.preloadedUrls[paraIdx] = blobUrl;
-        return blobUrl;
+    const audioUrl = buildServerEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
+    state.preloadedUrls[paraIdx] = audioUrl;
+
+    state.audioPreloadPromises[paraIdx] = fetch(audioUrl, {
+      method: 'GET',
+      cache: 'force-cache',
+      priority: 'low'
+    })
+      .then(res => {
+        if (!res.ok || !/^audio\/mpeg/i.test(res.headers.get('Content-Type') || '')) {
+          throw new Error(`audio-preload-${res.status}`);
+        }
+        return res.blob();
       })
-      .catch(async () => {
-        try {
-          const audioUrl = buildServerEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
-          const res = await fetch(audioUrl, { method: 'GET', cache: 'force-cache', priority: 'low' });
-          if (!res.ok || !/^audio\/mpeg/i.test(res.headers.get('Content-Type') || '')) {
-            throw new Error(`audio-preload-${res.status}`);
-          }
-          const blob = await res.blob();
+      .then(blob => {
+        if (blob && blob.size > 0) {
           const blobUrl = URL.createObjectURL(blob);
           state.preloadedUrls[paraIdx] = blobUrl;
           return blobUrl;
-        } catch {
-          delete state.preloadedUrls[paraIdx];
-          return null;
         }
+        return audioUrl;
+      })
+      .catch(() => {
+        return audioUrl;
       })
       .finally(() => {
         delete state.audioPreloadPromises[paraIdx];
@@ -976,28 +875,10 @@
       // Check preloaded cache first for instant 0ms playback
       let audioUrl = state.preloadedUrls[paraIdx];
       if (!audioUrl) {
-        if (state.audioPreloadPromises[paraIdx]) {
-          try {
-            audioUrl = await state.audioPreloadPromises[paraIdx];
-          } catch {}
-        }
-      }
-
-      if (!audioUrl) {
-        try {
-          audioUrl = await generateClientEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
-          if (audioUrl) state.preloadedUrls[paraIdx] = audioUrl;
-        } catch (clientErr) {
-          console.warn('Client Edge WS failed, trying server endpoint:', clientErr?.message);
-          audioUrl = buildServerEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
-        }
+        audioUrl = buildServerEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
       }
 
       if (state.token !== currentToken) return;
-      if (!audioUrl) {
-        retryCurrentAudio('không tìm thấy nguồn phát');
-        return;
-      }
 
       audio.src = audioUrl;
       audio.play().catch(err => {

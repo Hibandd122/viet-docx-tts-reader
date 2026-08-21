@@ -1,5 +1,5 @@
-import WebSocket from 'ws';
-import crypto from 'node:crypto';
+const WebSocket = require('ws');
+const crypto = require('crypto');
 
 const TRUSTED_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
 const audioCache = new Map();
@@ -33,7 +33,7 @@ function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pit
     const ticks = Math.floor(Date.now() / 1000) + 11644473600;
     const rounded = ticks - (ticks % 300);
     const windowsTicks = rounded * 10000000;
-    const data = new TextEncoder().encode(`${windowsTicks}${TRUSTED_TOKEN}`);
+    const data = Buffer.from(`${windowsTicks}${TRUSTED_TOKEN}`, 'utf-8');
     const hash = crypto.createHash('sha256').update(data).digest('hex').toUpperCase();
 
     const reqId = crypto.randomUUID().replace(/-/g, '');
@@ -77,7 +77,7 @@ function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pit
 
     ws.on('message', (msg, isBinary) => {
       if (isBinary) {
-        const buf = Buffer.from(msg);
+        const buf = Buffer.isBuffer(msg) ? msg : Buffer.from(msg);
         if (buf.length >= 2) {
           const headerLen = buf.readUInt16BE(0);
           if (buf.length > headerLen + 2) {
@@ -121,7 +121,7 @@ function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pit
   });
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
@@ -134,10 +134,10 @@ export default async function handler(req, res) {
 
   try {
     const url = new URL(req.url, 'http://localhost');
-    const textParam = req.query?.text || url.searchParams.get('text') || '';
-    const voiceParam = req.query?.voice || url.searchParams.get('voice') || 'vi-VN-HoaiMyNeural';
-    const rateParam = req.query?.rate || url.searchParams.get('rate') || '1.0';
-    const pitchParam = req.query?.pitch || url.searchParams.get('pitch') || '1.0';
+    const textParam = (req.query && req.query.text) || url.searchParams.get('text') || '';
+    const voiceParam = (req.query && req.query.voice) || url.searchParams.get('voice') || 'vi-VN-HoaiMyNeural';
+    const rateParam = (req.query && req.query.rate) || url.searchParams.get('rate') || '1.0';
+    const pitchParam = (req.query && req.query.pitch) || url.searchParams.get('pitch') || '1.0';
 
     const text = String(textParam).trim();
     const voice = sanitizeEdgeVoice(voiceParam);
@@ -201,4 +201,4 @@ export default async function handler(req, res) {
       res.end();
     }
   }
-}
+};

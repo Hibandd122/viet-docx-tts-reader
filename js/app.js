@@ -57,7 +57,7 @@
     rate: Number(savedSettings.rate ?? 1.0),
     pitch: Number(savedSettings.pitch ?? 1.0),
     volume: Number(savedSettings.volume ?? 1.0),
-    isMuted: false,
+    isMuted: savedSettings.isMuted === true,
     prevVolume: 1.0,
 
     // Voices catalog
@@ -110,6 +110,7 @@
       rate: state.rate,
       pitch: state.pitch,
       volume: state.volume,
+      isMuted: state.isMuted,
       theme: state.theme,
       font: state.font,
       fontSize: state.fontSize,
@@ -2053,8 +2054,7 @@
     if ($('speedPillLabel')) $('speedPillLabel').textContent = `${state.rate.toFixed(2)}×`;
     if ($('pitch')) $('pitch').value = state.pitch;
     if ($('pitchValue')) $('pitchValue').textContent = state.pitch.toFixed(2);
-    if ($('volume')) $('volume').value = state.volume;
-    if ($('volumeValue')) $('volumeValue').textContent = `${Math.round(state.volume * 100)}%`;
+    applyVolumeChange(state.volume);
     if ($('fontSelect')) $('fontSelect').value = state.font;
     if ($('fontSize')) $('fontSize').value = state.fontSize;
     if ($('fontSizeValue')) $('fontSizeValue').textContent = `${state.fontSize}px`;

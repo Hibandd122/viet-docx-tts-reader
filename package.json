@@ -4,12 +4,14 @@
   "description": "Trình đọc truyện DOCX tiếng Việt cao cấp tích hợp Microsoft Edge Neural AI Voice, Web Speech, Bookmark và PWA",
   "type": "module",
   "scripts": {
-    "build": "node -e \"console.log('Build complete');\"",
     "start": "node server.mjs",
     "serve": "node server.mjs"
   },
   "dependencies": {
     "ws": "^8.21.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "keywords": [
     "vietnamese",

@@ -238,10 +238,10 @@
           </div>
         </div>
 
-        <!-- Group: Audio Cache & Preloading -->
+        <!-- Group: Audio Cache & Auto Preloading -->
         <div class="settings-group">
           <div class="settings-header">
-            <h3>Tải trước & Bộ nhớ đệm (Offline Cache)</h3>
+            <h3>Bộ nhớ đệm & Tải trước 5 đoạn</h3>
           </div>
 
           <div class="cache-status-card">
@@ -255,38 +255,21 @@
                 <span id="cacheSizeLabel" class="cache-stat-value">0 KB</span>
               </div>
               <div class="cache-stat-item">
-                <span class="cache-stat-label">Trạng thái</span>
-                <span id="cacheStatusBadge" class="cache-stat-badge">Sẵn sàng</span>
+                <span class="cache-stat-label">Tải trước 5 đoạn</span>
+                <span class="cache-stat-badge">Tự động ⚡</span>
               </div>
             </div>
 
-            <!-- Preload Progress Container -->
-            <div id="preloadProgressContainer" class="preload-progress-wrap" hidden>
-              <div class="preload-progress-header">
-                <span id="preloadProgressText">Đang tải trước âm thanh: 0/0 đoạn</span>
-                <span id="preloadPercentText">0%</span>
-              </div>
-              <div class="preload-progress-bar">
-                <div id="preloadProgressBarFill" class="preload-progress-fill" style="width: 0%"></div>
-              </div>
-            </div>
-
-            <div class="btn-row mt-2">
-              <button id="preloadChapterBtn" class="btn btn-primary flex-1" type="button">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                <span id="preloadChapterBtnText">Tải trước chương này</span>
-              </button>
-              <button id="clearCacheBtn" class="btn btn-secondary" type="button" title="Xóa toàn bộ âm thanh đã lưu trong cache">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                Xóa Cache
-              </button>
-            </div>
-
-            <label class="toggle-control mt-3">
+            <label class="toggle-control mt-2">
               <input id="autoPreloadNextCheck" type="checkbox" checked>
               <span class="toggle-track"></span>
-              <span class="toggle-label">Tự động tải trước 5 đoạn kế tiếp khi đang đọc</span>
+              <span class="toggle-label">Tự động tải trước 5 đoạn kế tiếp khi nghe (đọc liền mạch 0ms)</span>
             </label>
+
+            <button id="clearCacheBtn" class="btn btn-secondary w-full mt-2" type="button" title="Xóa toàn bộ âm thanh đã lưu trong cache">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              Xóa bộ nhớ đệm âm thanh
+            </button>
           </div>
         </div>
 
@@ -406,10 +389,6 @@
             <div class="chapter-progress-badge">
               <span id="chapterParagraphProgress">0/0 đoạn</span>
             </div>
-            <button id="quickPreloadChapterBtn" class="btn btn-preload-quick" type="button" title="Tải trước âm thanh chương này để nghe Offline 0ms">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-              <span id="quickPreloadChapterText">Tải voice chương</span>
-            </button>
             <button id="nextChapterBtnTop" class="btn btn-nav" aria-label="Chương sau">
               <span>Sau</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>

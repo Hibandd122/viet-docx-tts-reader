@@ -440,6 +440,10 @@
     }
 
     updateStatus(`Đã mở ${chap.title} (${totalParas} đoạn)`);
+    // Proactively preload next 5 paragraphs from current position
+    setTimeout(() => {
+      preloadNextParagraphs((savedPara || 0) - 1);
+    }, 150);
   }
 
   function updateChapterProgressBar(paraIdx, total) {
@@ -845,109 +849,6 @@
             delete state.audioPreloadPromises[targetIdx];
           });
       }
-    }
-  }
-
-  // Preload entire chapter audio in batch with progress indicator
-  let chapterPreloadAbortController = null;
-
-  function updatePreloadUI(isPreloading, completed = 0, total = 0) {
-    const container = $('preloadProgressContainer');
-    const textEl = $('preloadProgressText');
-    const percentEl = $('preloadPercentText');
-    const fillEl = $('preloadProgressBarFill');
-    const btnText = $('preloadChapterBtnText');
-    const quickText = $('quickPreloadChapterText');
-    const quickBtn = $('quickPreloadChapterBtn');
-    const badge = $('cacheStatusBadge');
-
-    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-    if (container) container.hidden = !isPreloading;
-    if (textEl) textEl.textContent = `Đang tải âm thanh: ${completed}/${total} đoạn`;
-    if (percentEl) percentEl.textContent = `${percent}%`;
-    if (fillEl) fillEl.style.width = `${percent}%`;
-
-    if (btnText) btnText.textContent = isPreloading ? 'Dừng tải trước' : 'Tải trước chương này';
-    if (quickText) quickText.textContent = isPreloading ? `Đang tải ${percent}%` : 'Tải voice chương';
-    if (quickBtn) quickBtn.classList.toggle('loading', isPreloading);
-
-    if (badge) {
-      if (isPreloading) {
-        badge.textContent = `Đang nạp (${percent}%)`;
-        badge.className = 'cache-stat-badge loading';
-      } else {
-        badge.className = 'cache-stat-badge';
-        updateCacheStatsUI();
-      }
-    }
-  }
-
-  async function toggleChapterPreload() {
-    if (state.engine !== 'edge') {
-      showToast('Tính năng tải trước áp dụng cho giọng đọc Microsoft Edge Neural AI.');
-      return;
-    }
-
-    if (chapterPreloadAbortController) {
-      chapterPreloadAbortController.abort();
-      chapterPreloadAbortController = null;
-      updatePreloadUI(false);
-      showToast('Đã dừng quá trình tải trước.');
-      return;
-    }
-
-    const chap = chapters[state.chapterIndex];
-    if (!chap || !chap.paragraphs || !chap.paragraphs.length) {
-      showToast('Chương hiện tại không có nội dung.');
-      return;
-    }
-
-    const paras = chap.paragraphs;
-    const total = paras.length;
-    const voice = getEdgeVoiceShortName();
-    const rate = state.rate;
-    const pitch = state.pitch;
-
-    chapterPreloadAbortController = new AbortController();
-    const signal = chapterPreloadAbortController.signal;
-
-    updatePreloadUI(true, 0, total);
-    showToast(`⚡ Đang tải trước âm thanh toàn bộ chương (${total} đoạn)...`);
-
-    let completed = 0;
-    let failed = 0;
-    const concurrency = 3;
-    let nextIndex = 0;
-
-    async function worker() {
-      while (nextIndex < total) {
-        if (signal.aborted) break;
-        const curIdx = nextIndex++;
-        const text = paras[curIdx]?.trim();
-        if (!text) {
-          completed++;
-          updatePreloadUI(true, completed, total);
-          continue;
-        }
-        try {
-          await fetchAndCacheParagraphAudio(state.chapterIndex, curIdx, text, voice, rate, pitch, signal);
-          completed++;
-        } catch (err) {
-          if (signal.aborted) break;
-          failed++;
-        }
-        updatePreloadUI(true, completed, total);
-      }
-    }
-
-    const workers = Array.from({ length: concurrency }, () => worker());
-    await Promise.all(workers);
-
-    if (!signal.aborted) {
-      chapterPreloadAbortController = null;
-      updatePreloadUI(false, completed, total);
-      showToast(`🎉 Đã tải hoàn tất ${completed}/${total} đoạn vào bộ nhớ đệm! Sẵn sàng nghe Offline 0ms.`);
     }
   }
 
@@ -2016,10 +1917,7 @@
       }
     });
 
-    // --- Audio Cache & Preload Controls ---
-    $('preloadChapterBtn')?.addEventListener('click', toggleChapterPreload);
-    $('quickPreloadChapterBtn')?.addEventListener('click', toggleChapterPreload);
-
+    // --- Audio Cache & 5-Paragraph Auto Preload Controls ---
     $('clearCacheBtn')?.addEventListener('click', async () => {
       if (confirm('Bạn có chắc muốn xóa toàn bộ âm thanh đã lưu trong bộ nhớ đệm (Cache) không?')) {
         await clearAudioCacheDB();
@@ -2031,6 +1929,9 @@
       state.autoPreloadNext = e.target.checked;
       saveSettings({ autoPreloadNext: state.autoPreloadNext });
       showToast(state.autoPreloadNext ? 'Đã bật tự động tải trước 5 đoạn kế tiếp' : 'Đã tắt tự động tải trước');
+      if (state.autoPreloadNext) {
+        preloadNextParagraphs(state.paragraphIndex);
+      }
     });
 
     // Hide Chrome Extension Option if not running in extension

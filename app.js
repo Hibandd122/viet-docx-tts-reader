@@ -73,6 +73,7 @@
     textAlign: savedSettings.textAlign || 'left',
     autoScroll: savedSettings.autoScroll !== false,
     autoNext: savedSettings.autoNext === true,
+    autoPreloadNext: savedSettings.autoPreloadNext !== false,
     dropCap: savedSettings.dropCap !== false,
     isZenMode: false,
     isSidebarOpen: true,
@@ -117,6 +118,7 @@
       textAlign: state.textAlign,
       autoScroll: state.autoScroll,
       autoNext: state.autoNext,
+      autoPreloadNext: state.autoPreloadNext,
       dropCap: state.dropCap
     };
     try { localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(toSave)); } catch {}
@@ -623,49 +625,205 @@
     return `${serverBaseUrl}/api/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voice)}&rate=${rate}&pitch=${pitch}`;
   }
 
-  function preloadServerEdgeAudio(paraIdx, text, voiceName) {
-    if (state.audioPreloadPromises[paraIdx]) return state.audioPreloadPromises[paraIdx];
+  // ==========================================================================
+  // INDEXEDDB AUDIO CACHE & OFFLINE PRE-DOWNLOAD ENGINE
+  // ==========================================================================
+  const IDB_AUDIO_DB_NAME = 'VietDocxAudioStore';
+  const IDB_AUDIO_DB_VERSION = 1;
+  const IDB_AUDIO_STORE = 'audio_cache';
 
-    const audioUrl = buildServerEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
-    state.preloadedUrls[paraIdx] = audioUrl;
-
-    state.audioPreloadPromises[paraIdx] = fetch(audioUrl, {
-      method: 'GET',
-      cache: 'force-cache',
-      priority: 'low'
-    })
-      .then(res => {
-        if (!res.ok || !/^audio\/mpeg/i.test(res.headers.get('Content-Type') || '')) {
-          throw new Error(`audio-preload-${res.status}`);
+  let _idbAudioPromise = null;
+  function getAudioDB() {
+    if (!_idbAudioPromise) {
+      _idbAudioPromise = new Promise((resolve) => {
+        if (!window.indexedDB) return resolve(null);
+        try {
+          const req = window.indexedDB.open(IDB_AUDIO_DB_NAME, IDB_AUDIO_DB_VERSION);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(IDB_AUDIO_STORE)) {
+              const store = db.createObjectStore(IDB_AUDIO_STORE, { keyPath: 'key' });
+              store.createIndex('chapterIndex', 'chapterIndex', { unique: false });
+              store.createIndex('timestamp', 'timestamp', { unique: false });
+            }
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = (err) => {
+            console.warn('Audio IDB open error:', err);
+            resolve(null);
+          };
+        } catch {
+          resolve(null);
         }
-        return res.blob();
-      })
-      .then(blob => {
-        if (blob && blob.size > 0) {
-          const blobUrl = URL.createObjectURL(blob);
-          state.preloadedUrls[paraIdx] = blobUrl;
-          return blobUrl;
-        }
-        return audioUrl;
-      })
-      .catch(() => {
-        return audioUrl;
-      })
-      .finally(() => {
-        delete state.audioPreloadPromises[paraIdx];
       });
-
-    return state.audioPreloadPromises[paraIdx];
+    }
+    return _idbAudioPromise;
   }
 
-  // Preload next paragraphs by forcing server to generate/cache MP3 first
+  function getAudioCacheKey(text, voice, rate, pitch) {
+    const rateFixed = Number(rate || 1.0).toFixed(2);
+    const pitchFixed = Number(pitch || 1.0).toFixed(2);
+    return `${voice}::${rateFixed}::${pitchFixed}::${String(text || '').trim()}`;
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes || bytes <= 0) return '0 KB';
+    if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  async function getCachedAudioBlob(key) {
+    try {
+      const db = await getAudioDB();
+      if (!db) return null;
+      return new Promise((resolve) => {
+        const tx = db.transaction(IDB_AUDIO_STORE, 'readonly');
+        const store = tx.objectStore(IDB_AUDIO_STORE);
+        const req = store.get(key);
+        req.onsuccess = () => {
+          if (req.result && req.result.blob) {
+            resolve(req.result.blob);
+          } else {
+            resolve(null);
+          }
+        };
+        req.onerror = () => resolve(null);
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  async function saveAudioBlobToCache(key, blob, meta = {}) {
+    try {
+      if (!blob || !(blob instanceof Blob) || blob.size === 0) return false;
+      const db = await getAudioDB();
+      if (!db) return false;
+      return new Promise((resolve) => {
+        const tx = db.transaction(IDB_AUDIO_STORE, 'readwrite');
+        const store = tx.objectStore(IDB_AUDIO_STORE);
+        const entry = {
+          key,
+          blob,
+          size: blob.size,
+          type: blob.type || 'audio/mpeg',
+          chapterIndex: meta.chapterIndex ?? state.chapterIndex,
+          paraIdx: meta.paraIdx ?? 0,
+          voice: meta.voice || state.voice,
+          rate: meta.rate || state.rate,
+          pitch: meta.pitch || state.pitch,
+          timestamp: Date.now()
+        };
+        store.put(entry);
+        tx.oncomplete = () => {
+          updateCacheStatsUI();
+          resolve(true);
+        };
+        tx.onerror = () => resolve(false);
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  async function getAudioCacheStats() {
+    try {
+      const db = await getAudioDB();
+      if (!db) return { count: 0, totalBytes: 0 };
+      return new Promise((resolve) => {
+        const tx = db.transaction(IDB_AUDIO_STORE, 'readonly');
+        const store = tx.objectStore(IDB_AUDIO_STORE);
+        const req = store.getAll();
+        req.onsuccess = () => {
+          const items = req.result || [];
+          let totalBytes = 0;
+          for (const item of items) {
+            totalBytes += (item.size || item.blob?.size || 0);
+          }
+          resolve({ count: items.length, totalBytes });
+        };
+        req.onerror = () => resolve({ count: 0, totalBytes: 0 });
+      });
+    } catch {
+      return { count: 0, totalBytes: 0 };
+    }
+  }
+
+  async function clearAudioCacheDB() {
+    try {
+      const db = await getAudioDB();
+      if (!db) return false;
+      return new Promise((resolve) => {
+        const tx = db.transaction(IDB_AUDIO_STORE, 'readwrite');
+        const store = tx.objectStore(IDB_AUDIO_STORE);
+        store.clear();
+        tx.oncomplete = () => {
+          Object.values(state.preloadedUrls).forEach(url => {
+            if (url && url.startsWith('blob:')) {
+              try { URL.revokeObjectURL(url); } catch {}
+            }
+          });
+          state.preloadedUrls = {};
+          updateCacheStatsUI();
+          resolve(true);
+        };
+        tx.onerror = () => resolve(false);
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  let updateCacheStatsTimer = null;
+  function updateCacheStatsUI() {
+    clearTimeout(updateCacheStatsTimer);
+    updateCacheStatsTimer = setTimeout(async () => {
+      const stats = await getAudioCacheStats();
+      if ($('cacheCountLabel')) $('cacheCountLabel').textContent = String(stats.count);
+      if ($('cacheSizeLabel')) $('cacheSizeLabel').textContent = formatBytes(stats.totalBytes);
+      if ($('cacheStatusBadge')) {
+        $('cacheStatusBadge').textContent = stats.count > 0 ? `Đã lưu (${stats.count})` : 'Sẵn sàng';
+      }
+    }, 150);
+  }
+
+  async function fetchAndCacheParagraphAudio(chapIdx, paraIdx, text, voice, rate, pitch, signal) {
+    const key = getAudioCacheKey(text, voice, rate, pitch);
+
+    // 1. Check IDB Cache for 0ms instant load
+    const cachedBlob = await getCachedAudioBlob(key);
+    if (cachedBlob && cachedBlob.size > 0) {
+      const blobUrl = URL.createObjectURL(cachedBlob);
+      if (chapIdx === state.chapterIndex) state.preloadedUrls[paraIdx] = blobUrl;
+      return blobUrl;
+    }
+
+    // 2. Fetch from /api/tts
+    const url = buildServerEdgeAudioUrl(text, voice, rate, pitch);
+    const res = await fetch(url, { method: 'GET', cache: 'force-cache', signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    if (!blob || blob.size === 0) throw new Error('Empty audio blob');
+
+    // 3. Save to IDB Cache
+    await saveAudioBlobToCache(key, blob, { chapterIndex: chapIdx, paraIdx, voice, rate, pitch });
+    const blobUrl = URL.createObjectURL(blob);
+    if (chapIdx === state.chapterIndex) state.preloadedUrls[paraIdx] = blobUrl;
+    return blobUrl;
+  }
+
+  // Preload next paragraphs continuously in background
   async function preloadNextParagraphs(currentIdx) {
-    if (state.engine !== 'edge') return;
+    if (state.engine !== 'edge' || !state.autoPreloadNext) return;
     const chap = chapters[state.chapterIndex];
     if (!chap || !chap.paragraphs) return;
     const voiceName = getEdgeVoiceShortName();
+    const rate = state.rate;
+    const pitch = state.pitch;
 
-    for (let offset = 1; offset <= 4; offset++) {
+    for (let offset = 1; offset <= 5; offset++) {
       const targetIdx = currentIdx + offset;
       if (targetIdx >= chap.paragraphs.length) break;
       if (state.preloadedUrls[targetIdx]) continue;
@@ -673,11 +831,123 @@
       const text = chap.paragraphs[targetIdx]?.trim();
       if (!text) continue;
 
-      try {
-        preloadServerEdgeAudio(targetIdx, text, voiceName)?.catch(() => {});
-      } catch {
-        // Ignored in background preload
+      if (!state.audioPreloadPromises[targetIdx]) {
+        state.audioPreloadPromises[targetIdx] = fetchAndCacheParagraphAudio(
+          state.chapterIndex,
+          targetIdx,
+          text,
+          voiceName,
+          rate,
+          pitch
+        )
+          .catch(() => null)
+          .finally(() => {
+            delete state.audioPreloadPromises[targetIdx];
+          });
       }
+    }
+  }
+
+  // Preload entire chapter audio in batch with progress indicator
+  let chapterPreloadAbortController = null;
+
+  function updatePreloadUI(isPreloading, completed = 0, total = 0) {
+    const container = $('preloadProgressContainer');
+    const textEl = $('preloadProgressText');
+    const percentEl = $('preloadPercentText');
+    const fillEl = $('preloadProgressBarFill');
+    const btnText = $('preloadChapterBtnText');
+    const quickText = $('quickPreloadChapterText');
+    const quickBtn = $('quickPreloadChapterBtn');
+    const badge = $('cacheStatusBadge');
+
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    if (container) container.hidden = !isPreloading;
+    if (textEl) textEl.textContent = `Đang tải âm thanh: ${completed}/${total} đoạn`;
+    if (percentEl) percentEl.textContent = `${percent}%`;
+    if (fillEl) fillEl.style.width = `${percent}%`;
+
+    if (btnText) btnText.textContent = isPreloading ? 'Dừng tải trước' : 'Tải trước chương này';
+    if (quickText) quickText.textContent = isPreloading ? `Đang tải ${percent}%` : 'Tải voice chương';
+    if (quickBtn) quickBtn.classList.toggle('loading', isPreloading);
+
+    if (badge) {
+      if (isPreloading) {
+        badge.textContent = `Đang nạp (${percent}%)`;
+        badge.className = 'cache-stat-badge loading';
+      } else {
+        badge.className = 'cache-stat-badge';
+        updateCacheStatsUI();
+      }
+    }
+  }
+
+  async function toggleChapterPreload() {
+    if (state.engine !== 'edge') {
+      showToast('Tính năng tải trước áp dụng cho giọng đọc Microsoft Edge Neural AI.');
+      return;
+    }
+
+    if (chapterPreloadAbortController) {
+      chapterPreloadAbortController.abort();
+      chapterPreloadAbortController = null;
+      updatePreloadUI(false);
+      showToast('Đã dừng quá trình tải trước.');
+      return;
+    }
+
+    const chap = chapters[state.chapterIndex];
+    if (!chap || !chap.paragraphs || !chap.paragraphs.length) {
+      showToast('Chương hiện tại không có nội dung.');
+      return;
+    }
+
+    const paras = chap.paragraphs;
+    const total = paras.length;
+    const voice = getEdgeVoiceShortName();
+    const rate = state.rate;
+    const pitch = state.pitch;
+
+    chapterPreloadAbortController = new AbortController();
+    const signal = chapterPreloadAbortController.signal;
+
+    updatePreloadUI(true, 0, total);
+    showToast(`⚡ Đang tải trước âm thanh toàn bộ chương (${total} đoạn)...`);
+
+    let completed = 0;
+    let failed = 0;
+    const concurrency = 3;
+    let nextIndex = 0;
+
+    async function worker() {
+      while (nextIndex < total) {
+        if (signal.aborted) break;
+        const curIdx = nextIndex++;
+        const text = paras[curIdx]?.trim();
+        if (!text) {
+          completed++;
+          updatePreloadUI(true, completed, total);
+          continue;
+        }
+        try {
+          await fetchAndCacheParagraphAudio(state.chapterIndex, curIdx, text, voice, rate, pitch, signal);
+          completed++;
+        } catch (err) {
+          if (signal.aborted) break;
+          failed++;
+        }
+        updatePreloadUI(true, completed, total);
+      }
+    }
+
+    const workers = Array.from({ length: concurrency }, () => worker());
+    await Promise.all(workers);
+
+    if (!signal.aborted) {
+      chapterPreloadAbortController = null;
+      updatePreloadUI(false, completed, total);
+      showToast(`🎉 Đã tải hoàn tất ${completed}/${total} đoạn vào bộ nhớ đệm! Sẵn sàng nghe Offline 0ms.`);
     }
   }
 
@@ -872,10 +1142,32 @@
         armProgressWatchdog();
       };
 
-      // Check preloaded cache first for instant 0ms playback
+      // Check preloaded cache and IndexedDB for instant 0ms playback
       let audioUrl = state.preloadedUrls[paraIdx];
       if (!audioUrl) {
-        audioUrl = buildServerEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
+        const key = getAudioCacheKey(text, voiceName, state.rate, state.pitch);
+        const cachedBlob = await getCachedAudioBlob(key);
+        if (cachedBlob && cachedBlob.size > 0) {
+          audioUrl = URL.createObjectURL(cachedBlob);
+          state.preloadedUrls[paraIdx] = audioUrl;
+        } else {
+          audioUrl = buildServerEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
+          // Background caching for next time
+          fetch(audioUrl, { method: 'GET', cache: 'force-cache' })
+            .then(r => (r.ok ? r.blob() : null))
+            .then(b => {
+              if (b && b.size > 0) {
+                saveAudioBlobToCache(key, b, {
+                  chapterIndex: state.chapterIndex,
+                  paraIdx,
+                  voice: voiceName,
+                  rate: state.rate,
+                  pitch: state.pitch
+                });
+              }
+            })
+            .catch(() => {});
+        }
       }
 
       if (state.token !== currentToken) return;
@@ -1724,6 +2016,23 @@
       }
     });
 
+    // --- Audio Cache & Preload Controls ---
+    $('preloadChapterBtn')?.addEventListener('click', toggleChapterPreload);
+    $('quickPreloadChapterBtn')?.addEventListener('click', toggleChapterPreload);
+
+    $('clearCacheBtn')?.addEventListener('click', async () => {
+      if (confirm('Bạn có chắc muốn xóa toàn bộ âm thanh đã lưu trong bộ nhớ đệm (Cache) không?')) {
+        await clearAudioCacheDB();
+        showToast('Đã xóa sạch bộ nhớ đệm âm thanh!');
+      }
+    });
+
+    $('autoPreloadNextCheck')?.addEventListener('change', (e) => {
+      state.autoPreloadNext = e.target.checked;
+      saveSettings({ autoPreloadNext: state.autoPreloadNext });
+      showToast(state.autoPreloadNext ? 'Đã bật tự động tải trước 5 đoạn kế tiếp' : 'Đã tắt tự động tải trước');
+    });
+
     // Hide Chrome Extension Option if not running in extension
     if (!isExtension) {
       const extCard = $('chromeExtEngineCard');
@@ -1768,6 +2077,7 @@
     if ($('pageWidthValue')) $('pageWidthValue').textContent = `${state.pageWidth}px`;
     if ($('autoScrollCheck')) $('autoScrollCheck').checked = state.autoScroll;
     if ($('autoNextCheck')) $('autoNextCheck').checked = state.autoNext;
+    if ($('autoPreloadNextCheck')) $('autoPreloadNextCheck').checked = state.autoPreloadNext;
     if ($('dropCapCheck')) $('dropCapCheck').checked = state.dropCap;
 
     const engineRadio = document.querySelector(`input[name="ttsEngine"][value="${state.engine}"]`);
@@ -1777,6 +2087,7 @@
     renderBookmarksList();
     updateBookmarkBadge();
     renderChapterList();
+    updateCacheStatsUI();
 
     // Select initial chapter
     selectChapter(state.chapterIndex, true);

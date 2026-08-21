@@ -425,13 +425,20 @@
     });
 
     const savedPara = getSavedParagraphForChapter(idx);
+    state.paragraphIndex = savedPara;
+    saveReadingProgress(idx, savedPara);
     updateChapterProgressBar(savedPara, totalParas);
 
     if (restorePosition && savedPara > 0 && savedPara < totalParas) {
       const targetEl = $(`para-${savedPara}`);
       if (targetEl) {
         targetEl.classList.add('resume-point');
-        setTimeout(() => targetEl.scrollIntoView({ block:'center', behavior:'smooth' }), 100);
+        setTimeout(() => {
+          targetEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }, 150);
+        setTimeout(() => {
+          targetEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }, 450);
       }
       updateNowReadingUI(`Tiếp tục từ đoạn ${savedPara + 1}/${totalParas}`);
     } else {
@@ -443,7 +450,7 @@
     // Proactively preload next 5 paragraphs from current position
     setTimeout(() => {
       preloadNextParagraphs((savedPara || 0) - 1);
-    }, 150);
+    }, 200);
   }
 
   function updateChapterProgressBar(paraIdx, total) {
@@ -780,6 +787,46 @@
     }
   }
 
+  // Strictly prune cache and memory to keep ONLY active sliding window of max 5 paragraphs
+  async function pruneAudioCacheSlidingWindow(chapIdx, currentParaIdx) {
+    const minPara = Math.max(0, currentParaIdx);
+    const maxPara = minPara + 5; // Active window: [current, current + 5]
+
+    // 1. Revoke memory Blob URLs outside the active window
+    for (const idxStr of Object.keys(state.preloadedUrls)) {
+      const idx = Number(idxStr);
+      if (idx < minPara || idx > maxPara) {
+        const url = state.preloadedUrls[idx];
+        if (url && url.startsWith('blob:')) {
+          try { URL.revokeObjectURL(url); } catch {}
+        }
+        delete state.preloadedUrls[idx];
+      }
+    }
+
+    // 2. Remove old records from IndexedDB to maintain strictly 5 cached paragraphs
+    try {
+      const db = await getAudioDB();
+      if (!db) return;
+      const tx = db.transaction(IDB_AUDIO_STORE, 'readwrite');
+      const store = tx.objectStore(IDB_AUDIO_STORE);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const items = req.result || [];
+        for (const item of items) {
+          const isDiffChap = (item.chapterIndex !== undefined && item.chapterIndex !== chapIdx);
+          const isOutsideWindow = (item.paraIdx !== undefined && (item.paraIdx < minPara || item.paraIdx > maxPara));
+          if (isDiffChap || isOutsideWindow) {
+            store.delete(item.key);
+          }
+        }
+      };
+      tx.oncomplete = () => {
+        updateCacheStatsUI();
+      };
+    } catch {}
+  }
+
   let updateCacheStatsTimer = null;
   function updateCacheStatsUI() {
     clearTimeout(updateCacheStatsTimer);
@@ -788,7 +835,7 @@
       if ($('cacheCountLabel')) $('cacheCountLabel').textContent = String(stats.count);
       if ($('cacheSizeLabel')) $('cacheSizeLabel').textContent = formatBytes(stats.totalBytes);
       if ($('cacheStatusBadge')) {
-        $('cacheStatusBadge').textContent = stats.count > 0 ? `Đã lưu (${stats.count})` : 'Sẵn sàng';
+        $('cacheStatusBadge').textContent = stats.count > 0 ? `Tự động (${stats.count})` : 'Sẵn sàng';
       }
     }, 150);
   }
@@ -811,14 +858,16 @@
     const blob = await res.blob();
     if (!blob || blob.size === 0) throw new Error('Empty audio blob');
 
-    // 3. Save to IDB Cache
+    // 3. Save to IDB Cache & Prune
     await saveAudioBlobToCache(key, blob, { chapterIndex: chapIdx, paraIdx, voice, rate, pitch });
     const blobUrl = URL.createObjectURL(blob);
     if (chapIdx === state.chapterIndex) state.preloadedUrls[paraIdx] = blobUrl;
+
+    pruneAudioCacheSlidingWindow(chapIdx, state.paragraphIndex);
     return blobUrl;
   }
 
-  // Preload next paragraphs continuously in background
+  // Preload next paragraphs continuously in background (sliding 5 items ahead)
   async function preloadNextParagraphs(currentIdx) {
     if (state.engine !== 'edge' || !state.autoPreloadNext) return;
     const chap = chapters[state.chapterIndex];
@@ -826,6 +875,9 @@
     const voiceName = getEdgeVoiceShortName();
     const rate = state.rate;
     const pitch = state.pitch;
+
+    // Prune before fetching next items
+    pruneAudioCacheSlidingWindow(state.chapterIndex, Math.max(0, currentIdx));
 
     for (let offset = 1; offset <= 5; offset++) {
       const targetIdx = currentIdx + offset;
@@ -1931,6 +1983,40 @@
       showToast(state.autoPreloadNext ? 'Đã bật tự động tải trước 5 đoạn kế tiếp' : 'Đã tắt tự động tải trước');
       if (state.autoPreloadNext) {
         preloadNextParagraphs(state.paragraphIndex);
+      }
+    });
+
+    // Scroll-Spy to save visual reading progress when not playing audio
+    let scrollSpyTimer = null;
+    window.addEventListener('scroll', () => {
+      if (state.isPlaying) return;
+      clearTimeout(scrollSpyTimer);
+      scrollSpyTimer = setTimeout(() => {
+        const midX = window.innerWidth / 2;
+        const midY = window.innerHeight * 0.35;
+        const el = document.elementFromPoint(midX, midY)?.closest('p[data-paragraph]');
+        if (el) {
+          const pIdx = Number(el.dataset.paragraph);
+          if (!isNaN(pIdx) && pIdx >= 0 && pIdx !== state.paragraphIndex) {
+            state.paragraphIndex = pIdx;
+            saveReadingProgress(state.chapterIndex, pIdx);
+          }
+        }
+      }, 350);
+    }, { passive: true });
+
+    // Always persist latest reading position when closing tab or switching app
+    window.addEventListener('beforeunload', () => {
+      if (state.chapterIndex >= 0) {
+        const p = state.paragraphIndex >= 0 ? state.paragraphIndex : getSavedParagraphForChapter(state.chapterIndex);
+        saveReadingProgress(state.chapterIndex, p);
+      }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && state.chapterIndex >= 0) {
+        const p = state.paragraphIndex >= 0 ? state.paragraphIndex : getSavedParagraphForChapter(state.chapterIndex);
+        saveReadingProgress(state.chapterIndex, p);
       }
     });
 

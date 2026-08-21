@@ -1,73 +1,54 @@
-import WebSocket from 'ws';
-import crypto from 'crypto';
+import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 
-const TRUSTED_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
+const audioCache = new Map();
+const pendingAudioCache = new Map();
+const MAX_CACHE_ITEMS = 100;
 
-function sanitizeEdgeVoice(voice) {
-  if (!voice || typeof voice !== 'string') return 'vi-VN-HoaiMyNeural';
-  if (/NamMinh|Nam Minh|Male|Nam/i.test(voice)) return 'vi-VN-NamMinhNeural';
-  if (/HoaiMy|Hoài My|Female|Nữ/i.test(voice)) return 'vi-VN-HoaiMyNeural';
-  if (voice.includes('Neural')) return voice;
+function getParam(value, fallback = '') {
+  if (Array.isArray(value)) return value[0] ?? fallback;
+  return value ?? fallback;
+}
+
+function sanitizeEdgeVoice(rawVoice) {
+  const voiceText = String(rawVoice || '');
+  if (/NamMinh|Nam Minh|Male|Nam/i.test(voiceText)) return 'vi-VN-NamMinhNeural';
+  if (/HoaiMy|Hoai My|Female|Nu|N\u1eef/i.test(voiceText)) return 'vi-VN-HoaiMyNeural';
+  if (voiceText.includes('Neural')) return voiceText;
   return 'vi-VN-HoaiMyNeural';
 }
 
-function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pitch = '+0Hz') {
-  return new Promise((resolve, reject) => {
-    const ticks = Math.floor(Date.now() / 1000) + 11644473600;
-    const rounded = ticks - (ticks % 300);
-    const windowsTicks = rounded * 10000000;
-    const data = new TextEncoder().encode(`${windowsTicks}${TRUSTED_TOKEN}`);
-    const hash = crypto.createHash('sha256').update(data).digest('hex').toUpperCase();
+function normalizeRate(rateParam) {
+  const rateNum = Math.max(0.5, Math.min(2.0, parseFloat(rateParam) || 1.0));
+  return `${rateNum >= 1 ? '+' : ''}${Math.round((rateNum - 1) * 100)}%`;
+}
 
-    const reqId = crypto.randomUUID().replace(/-/g, '');
-    const connId = crypto.randomUUID().replace(/-/g, '');
-    const url = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_TOKEN}&Sec-MS-GEC=${hash}&Sec-MS-GEC-Version=1-143.0.3650.96&ConnectionId=${connId}`;
+function normalizePitch(pitchParam) {
+  const pitchNum = Math.max(0.5, Math.min(1.5, parseFloat(pitchParam) || 1.0));
+  return `${pitchNum >= 1 ? '+' : ''}${Math.round((pitchNum - 1) * 50)}Hz`;
+}
 
-    const ws = new WebSocket(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0',
-        'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold'
-      }
-    });
+function getCacheKey(voice, text, rate, pitch) {
+  return `${voice}::${rate}::${pitch}::${text.trim()}`;
+}
 
-    const audioChunks = [];
-    const timeout = setTimeout(() => {
-      try { ws.close(); } catch {}
-      reject(new Error('Edge TTS WebSocket timeout after 15s'));
-    }, 15000);
+async function synthesizeEdgeTTS(text, voice, rate, pitch) {
+  const requestTts = new MsEdgeTTS();
+  let selectedVoice = voice;
 
-    ws.on('open', () => {
-      const configMsg = 'Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}';
-      ws.send(configMsg, () => {
-        const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="vi-VN"><voice name="${voice}"><prosody pitch="${pitch}" rate="${rate}">${escaped}</prosody></voice></speak>`;
-        const ssmlMsg = `X-RequestId:${reqId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`;
-        ws.send(ssmlMsg);
-      });
-    });
+  try {
+    await requestTts.setMetadata(selectedVoice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+  } catch {
+    selectedVoice = 'vi-VN-HoaiMyNeural';
+    await requestTts.setMetadata(selectedVoice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+  }
 
-    ws.on('message', (msg, isBinary) => {
-      if (isBinary) {
-        const buf = Buffer.from(msg);
-        const headerLen = buf.readUInt16BE(0);
-        if (buf.length > headerLen + 2) {
-          audioChunks.push(buf.subarray(headerLen + 2));
-        }
-      } else {
-        const textMsg = msg.toString();
-        if (textMsg.includes('Path:turn.end')) {
-          clearTimeout(timeout);
-          try { ws.close(); } catch {}
-          resolve(Buffer.concat(audioChunks));
-        }
-      }
-    });
+  const { audioStream } = requestTts.toStream(text, { rate, pitch });
+  const chunks = [];
 
-    ws.on('error', err => {
-      clearTimeout(timeout);
-      try { ws.close(); } catch {}
-      reject(err);
-    });
+  return await new Promise((resolve, reject) => {
+    audioStream.on('data', chunk => chunks.push(chunk));
+    audioStream.on('end', () => resolve(Buffer.concat(chunks)));
+    audioStream.on('error', reject);
   });
 }
 
@@ -82,26 +63,50 @@ export default async function handler(req, res) {
   }
 
   try {
-    const text = (req.query?.text || '').trim();
-    const voice = sanitizeEdgeVoice(req.query?.voice);
-    const rate = req.query?.rate || '1.0';
-    const pitch = req.query?.pitch || '1.0';
+    const text = String(getParam(req.query?.text)).trim();
+    const voice = sanitizeEdgeVoice(getParam(req.query?.voice, 'vi-VN-HoaiMyNeural'));
+    const rate = normalizeRate(getParam(req.query?.rate, '1.0'));
+    const pitch = normalizePitch(getParam(req.query?.pitch, '1.0'));
 
     if (!text) {
       res.status(400).send('Missing text parameter');
       return;
     }
 
-    const rateNum = Math.max(0.5, Math.min(2.0, parseFloat(rate) || 1.0));
-    const ratePercent = `${rateNum >= 1 ? '+' : ''}${Math.round((rateNum - 1) * 100)}%`;
+    const cacheKey = getCacheKey(voice, text, rate, pitch);
 
-    const pitchNum = Math.max(0.5, Math.min(1.5, parseFloat(pitch) || 1.0));
-    const pitchPercent = `${pitchNum >= 1 ? '+' : ''}${Math.round((pitchNum - 1) * 50)}Hz`;
+    if (audioCache.has(cacheKey)) {
+      const cachedBuffer = audioCache.get(cacheKey);
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Content-Length', cachedBuffer.length);
+      res.setHeader('X-Cache', 'HIT');
+      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800');
+      res.status(200).send(cachedBuffer);
+      return;
+    }
 
-    const audioBuffer = await synthesizeEdgeTTS(text, voice, ratePercent, pitchPercent);
+    if (!pendingAudioCache.has(cacheKey)) {
+      pendingAudioCache.set(
+        cacheKey,
+        synthesizeEdgeTTS(text, voice, rate, pitch).finally(() => pendingAudioCache.delete(cacheKey))
+      );
+    }
+
+    const audioBuffer = await pendingAudioCache.get(cacheKey);
+    if (!audioBuffer.length) {
+      res.status(502).send('TTS returned empty audio');
+      return;
+    }
+
+    if (audioCache.size >= MAX_CACHE_ITEMS) {
+      const firstKey = audioCache.keys().next().value;
+      audioCache.delete(firstKey);
+    }
+    audioCache.set(cacheKey, audioBuffer);
 
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Content-Length', audioBuffer.length);
+    res.setHeader('X-Cache', 'MISS');
     res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800');
     res.status(200).send(audioBuffer);
   } catch (err) {

@@ -19,11 +19,13 @@
   const STORAGE_SETTINGS = 'vol9_pro_settings';
   const STORAGE_PROGRESS = 'vol9_pro_progress';
   const STORAGE_BOOKMARKS = 'vol9_pro_bookmarks';
+  const APP_BUILD = 'audio-cache-v3';
 
   // Environment detection
   const isExtension = typeof chrome !== 'undefined' && Boolean(chrome.runtime?.id);
   const isHttp = location.protocol.startsWith('http');
   const serverBaseUrl = isHttp ? location.origin : 'http://127.0.0.1:8765';
+  console.info(`Vol9 Web Reader build ${APP_BUILD}`);
 
   // Load Saved Data
   const savedSettings = (() => {
@@ -88,7 +90,11 @@
 
     // Master Audio Player (Single persistent instance to avoid mobile browser auto-play block)
     masterAudio: new Audio(),
-    preloadedUrls: {}, // paragraphIndex -> blobUrl
+    preloadedUrls: {}, // paragraphIndex -> audio URL
+    audioPreloadPromises: {},
+    edgeServerFallback: {}, // paragraphIndex -> force server API after a bad client blob
+    edgeRetryAttempts: {},
+    volumeApplyTimer: null,
     wakeLock: null
   };
 
@@ -604,89 +610,52 @@
     return v;
   }
 
-  // Direct Client-Side WebSocket Microsoft Edge Neural AI Synthesizer
-  async function generateClientEdgeAudioUrl(text, voice = 'vi-VN-HoaiMyNeural', rate = 1.0, pitch = 1.0) {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const TRUSTED_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
-        const ticks = Math.floor(Date.now() / 1000) + 11644473600;
-        const rounded = ticks - (ticks % 300);
-        const windowsTicks = rounded * 10000000;
-        const encoder = new TextEncoder();
-        const data = encoder.encode(`${windowsTicks}${TRUSTED_TOKEN}`);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hash = Array.from(new Uint8Array(hashBuffer))
-          .map(b => b.toString(16).padStart(2, '0'))
-          .join('')
-          .toUpperCase();
-
-        const reqId = 'xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx'.replace(/[xy]/g, c => {
-          const r = Math.random() * 16 | 0;
-          return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-        });
-        const connId = 'xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx'.replace(/[xy]/g, c => {
-          const r = Math.random() * 16 | 0;
-          return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-        });
-
-        const ratePercent = `${rate >= 1 ? '+' : ''}${Math.round((rate - 1) * 100)}%`;
-        const pitchPercent = `${pitch >= 1 ? '+' : ''}${Math.round((pitch - 1) * 50)}Hz`;
-
-        const url = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_TOKEN}&Sec-MS-GEC=${hash}&Sec-MS-GEC-Version=1-143.0.3650.96&ConnectionId=${connId}`;
-
-        const ws = new WebSocket(url);
-        ws.binaryType = 'arraybuffer';
-
-        const audioChunks = [];
-        const timer = setTimeout(() => {
-          try { ws.close(); } catch {}
-          reject(new Error('Edge TTS timeout'));
-        }, 12000);
-
-        ws.onopen = () => {
-          const configMsg = 'Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}';
-          ws.send(configMsg);
-
-          const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="vi-VN"><voice name="${voice}"><prosody pitch="${pitchPercent}" rate="${ratePercent}">${escaped}</prosody></voice></speak>`;
-          const ssmlMsg = `X-RequestId:${reqId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`;
-          ws.send(ssmlMsg);
-        };
-
-        ws.onmessage = (e) => {
-          if (e.data instanceof ArrayBuffer) {
-            const view = new DataView(e.data);
-            const headerLen = view.getUint16(0);
-            if (e.data.byteLength > headerLen + 2) {
-              audioChunks.push(e.data.slice(headerLen + 2));
-            }
-          } else if (typeof e.data === 'string' && e.data.includes('Path:turn.end')) {
-            clearTimeout(timer);
-            try { ws.close(); } catch {}
-            const blob = new Blob(audioChunks, { type: 'audio/mpeg' });
-            resolve(URL.createObjectURL(blob));
-          }
-        };
-
-        ws.onerror = (err) => {
-          clearTimeout(timer);
-          try { ws.close(); } catch {}
-          reject(err);
-        };
-      } catch (e) {
-        reject(e);
-      }
-    });
+  function buildServerEdgeAudioUrl(text, voice, rate, pitch) {
+    return `${serverBaseUrl}/api/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voice)}&rate=${rate}&pitch=${pitch}`;
   }
 
-  // Preload next 2 paragraphs in background for zero-latency gapless playback
+  // Edge audio must go through the local server. Browser-side Bing WebSocket
+  // connections are unstable and blocked/reset on many networks.
+  async function generateClientEdgeAudioUrl(text, voice = 'vi-VN-HoaiMyNeural', rate = 1.0, pitch = 1.0) {
+    return buildServerEdgeAudioUrl(text, voice, rate, pitch);
+  }
+
+  function preloadServerEdgeAudio(paraIdx, text, voiceName) {
+    if (state.audioPreloadPromises[paraIdx]) return state.audioPreloadPromises[paraIdx];
+
+    const audioUrl = buildServerEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
+    state.preloadedUrls[paraIdx] = audioUrl;
+
+    state.audioPreloadPromises[paraIdx] = fetch(audioUrl, {
+      method: 'GET',
+      cache: 'force-cache',
+      priority: 'low'
+    })
+      .then(res => {
+        if (!res.ok || !/^audio\/mpeg/i.test(res.headers.get('Content-Type') || '')) {
+          throw new Error(`audio-preload-${res.status}`);
+        }
+        return res.arrayBuffer();
+      })
+      .catch(err => {
+        delete state.preloadedUrls[paraIdx];
+        throw err;
+      })
+      .finally(() => {
+        delete state.audioPreloadPromises[paraIdx];
+      });
+
+    return state.audioPreloadPromises[paraIdx];
+  }
+
+  // Preload next paragraphs by forcing the local server to generate/cache MP3 first.
   async function preloadNextParagraphs(currentIdx) {
     if (state.engine !== 'edge') return;
     const chap = chapters[state.chapterIndex];
     if (!chap || !chap.paragraphs) return;
     const voiceName = getEdgeVoiceShortName();
 
-    for (let offset = 1; offset <= 2; offset++) {
+    for (let offset = 1; offset <= 4; offset++) {
       const targetIdx = currentIdx + offset;
       if (targetIdx >= chap.paragraphs.length) break;
       if (state.preloadedUrls[targetIdx]) continue;
@@ -695,8 +664,7 @@
       if (!text) continue;
 
       try {
-        const blobUrl = await generateClientEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
-        state.preloadedUrls[targetIdx] = blobUrl;
+        preloadServerEdgeAudio(targetIdx, text, voiceName);
       } catch {
         // Ignored in background preload
       }
@@ -810,6 +778,51 @@
     if (state.engine === 'edge') {
       const voiceName = getEdgeVoiceShortName();
       const audio = state.masterAudio;
+      state.currentAudio = audio;
+      const serverEdgeFirst = true;
+      let progressTimer = 0;
+      let lastPlaybackTime = -1;
+      let finished = false;
+      const clearProgressTimer = () => { if (progressTimer) { clearTimeout(progressTimer); progressTimer = 0; } };
+      const armProgressWatchdog = () => {
+        clearProgressTimer();
+        if (state.token !== currentToken || !state.isPlaying || state.isPaused || audio.paused) return;
+        progressTimer = setTimeout(() => {
+          if (state.token !== currentToken || finished || state.isPaused || audio.paused) return;
+          const current = Number(audio.currentTime) || 0;
+          if (lastPlaybackTime >= 0 && current <= lastPlaybackTime + 0.05) retryCurrentAudio('bị đứng');
+          else { lastPlaybackTime = current; armProgressWatchdog(); }
+        }, 8000);
+      };
+      const retryCurrentAudio = reason => {
+        if (state.token !== currentToken || finished || state.isPaused) return;
+        clearProgressTimer();
+        const attempts = Number(state.edgeRetryAttempts[paraIdx] || 0);
+        if (attempts >= 2) {
+          state.isBuffering = false;
+          state.isPaused = true;
+          syncPlayerControlsUI();
+          showToast(`Audio ${reason}. Bấm tiếp tục để thử lại.`);
+          return;
+        }
+        state.edgeRetryAttempts[paraIdx] = attempts + 1;
+        finished = true;
+        const failedUrl = state.preloadedUrls[paraIdx];
+        if (failedUrl) {
+          try { URL.revokeObjectURL(failedUrl); } catch {}
+          delete state.preloadedUrls[paraIdx];
+        }
+        delete state.audioPreloadPromises[paraIdx];
+        state.edgeServerFallback[paraIdx] = true;
+        state.isBuffering = true;
+        showToast(`Audio ${reason}, đang thử lại lần ${attempts + 1}/2…`);
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+        setTimeout(() => {
+          if (state.token === currentToken && state.isPlaying && !state.isPaused) playParagraph(paraIdx);
+        }, 350);
+      };
 
       audio.volume = state.isMuted ? 0 : state.volume;
       audio.playbackRate = 1.0;
@@ -817,33 +830,54 @@
       audio.ontimeupdate = () => {
         if (state.token !== currentToken) return;
         const cur = audio.currentTime || 0;
+        lastPlaybackTime = cur;
+        armProgressWatchdog();
         const dur = audio.duration || 1;
         updatePlayerTimeline(cur, dur);
       };
 
       audio.onended = () => {
-        if (state.token !== currentToken) return;
+        if (state.token !== currentToken || finished) return;
+        finished = true;
+        clearProgressTimer();
         playParagraph(state.paragraphIndex + 1);
       };
 
-      audio.onerror = (e) => {
+      audio.onerror = () => {
         if (state.token !== currentToken) return;
-        console.warn('Edge TTS playback notice, advancing next...', e);
-        setTimeout(() => {
-          if (state.token === currentToken && state.isPlaying) {
-            playParagraph(state.paragraphIndex + 1);
-          }
-        }, 400);
+        retryCurrentAudio('bị lỗi');
+      };
+      audio.onplay = () => {
+        if (state.token !== currentToken) return;
+        state.isBuffering = false;
+        delete state.edgeRetryAttempts[paraIdx];
+        lastPlaybackTime = Number(audio.currentTime) || 0;
+        armProgressWatchdog();
       };
 
       // Check preloaded cache first for instant 0ms playback
       let audioUrl = state.preloadedUrls[paraIdx];
       if (!audioUrl) {
+        if (serverEdgeFirst || state.edgeServerFallback[paraIdx]) {
+          audioUrl = buildServerEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
+        } else {
+          try {
+            audioUrl = await generateClientEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
+            if (!audioUrl) throw new Error('empty-edge-audio');
+            state.preloadedUrls[paraIdx] = audioUrl;
+          } catch {
+            audioUrl = buildServerEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
+          }
+        }
+      }
+
+      if (state.token !== currentToken) return;
+
+      if (state.audioPreloadPromises[paraIdx]) {
         try {
-          audioUrl = await generateClientEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
-          state.preloadedUrls[paraIdx] = audioUrl;
+          await state.audioPreloadPromises[paraIdx];
         } catch {
-          audioUrl = `${serverBaseUrl}/api/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voiceName)}&rate=${state.rate}&pitch=${state.pitch}`;
+          audioUrl = buildServerEdgeAudioUrl(text, voiceName, state.rate, state.pitch);
         }
       }
 
@@ -852,6 +886,7 @@
       audio.src = audioUrl;
       audio.play().catch(err => {
         console.warn('Audio play() catch:', err);
+        retryCurrentAudio('không phát được');
       });
 
       // Eagerly preload next 2 paragraphs
@@ -1169,6 +1204,26 @@
 
     if (state.currentAudio) {
       state.currentAudio.volume = effectiveVol;
+    }
+    if (state.masterAudio) {
+      state.masterAudio.volume = effectiveVol;
+      state.masterAudio.muted = state.isMuted;
+    }
+
+    if (state.volumeApplyTimer) clearTimeout(state.volumeApplyTimer);
+    if (state.isPlaying && !state.isPaused && state.engine === 'webspeech' && speechApi) {
+      state.volumeApplyTimer = setTimeout(() => {
+        if (state.isPlaying && !state.isPaused && state.engine === 'webspeech') {
+          speechApi.cancel();
+          playParagraph(state.paragraphIndex);
+        }
+      }, 150);
+    } else if (state.isPlaying && state.engine === 'chrome-ext' && isExtension) {
+      chrome.runtime.sendMessage({
+        type: 'TTS_CONTROL',
+        action: 'volume',
+        volume: effectiveVol
+      });
     }
     saveSettings({ volume: state.volume });
   }
@@ -1747,4 +1802,3 @@
     init();
   }
 })();
-

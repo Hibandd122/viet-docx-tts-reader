@@ -1,11 +1,13 @@
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
-import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
+import WebSocket from 'ws';
+import crypto from 'node:crypto';
 
 const root = resolve('D:/Extension/Vol9_WebReader');
 const PORT = 8765;
 const HOST = '127.0.0.1';
+const TRUSTED_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -39,33 +41,133 @@ function getCacheKey(voice, text, rate, pitch) {
 
 let cachedVoices = null;
 
+const FALLBACK_VOICES = [
+  {
+    ShortName: 'vi-VN-HoaiMyNeural',
+    FriendlyName: 'Microsoft Hoài My (Nữ - Tự nhiên)',
+    Gender: 'Female',
+    Locale: 'vi-VN'
+  },
+  {
+    ShortName: 'vi-VN-NamMinhNeural',
+    FriendlyName: 'Microsoft Nam Minh (Nam - Tự nhiên)',
+    Gender: 'Male',
+    Locale: 'vi-VN'
+  }
+];
+
 async function getAvailableVoices() {
   if (cachedVoices) return cachedVoices;
   try {
-    const voiceClient = new MsEdgeTTS();
-    const voices = await voiceClient.getVoices();
-    cachedVoices = voices.filter(v => 
-      (v.Locale && (v.Locale.startsWith('vi') || v.Locale.startsWith('en'))) ||
-      /vietnamese|tiếng việt/i.test(v.FriendlyName || '')
+    const response = await fetch(
+      `https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=${TRUSTED_TOKEN}`,
+      { signal: AbortSignal.timeout(5000) }
     );
-    return cachedVoices;
+    if (response.ok) {
+      const list = await response.json();
+      cachedVoices = list.filter(v =>
+        (v.Locale && (v.Locale.startsWith('vi') || v.Locale.startsWith('en'))) ||
+        /vietnamese|tiếng việt/i.test(v.FriendlyName || '')
+      );
+      return cachedVoices;
+    }
   } catch (err) {
-    console.error('Error fetching Edge voices:', err);
-    return [
-      {
-        ShortName: 'vi-VN-HoaiMyNeural',
-        FriendlyName: 'Microsoft Hoài My (Nữ - Tự nhiên)',
-        Gender: 'Female',
-        Locale: 'vi-VN'
-      },
-      {
-        ShortName: 'vi-VN-NamMinhNeural',
-        FriendlyName: 'Microsoft Nam Minh (Nam - Tự nhiên)',
-        Gender: 'Male',
-        Locale: 'vi-VN'
-      }
-    ];
+    console.warn('Error fetching Edge voices:', err);
   }
+  return FALLBACK_VOICES;
+}
+
+function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pitch = '+0Hz') {
+  return new Promise((resolveTTS, rejectTTS) => {
+    const ticks = Math.floor(Date.now() / 1000) + 11644473600;
+    const rounded = ticks - (ticks % 300);
+    const windowsTicks = rounded * 10000000;
+    const data = new TextEncoder().encode(`${windowsTicks}${TRUSTED_TOKEN}`);
+    const hash = crypto.createHash('sha256').update(data).digest('hex').toUpperCase();
+
+    const reqId = crypto.randomUUID().replace(/-/g, '');
+    const connId = crypto.randomUUID().replace(/-/g, '');
+    const url = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_TOKEN}&Sec-MS-GEC=${hash}&Sec-MS-GEC-Version=1-143.0.3650.96&ConnectionId=${connId}`;
+
+    const ws = new WebSocket(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0',
+        'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
+        'Pragma': 'no-cache',
+        'Cache-Control': 'no-cache'
+      }
+    });
+
+    const audioChunks = [];
+    let isFinished = false;
+
+    const timer = setTimeout(() => {
+      if (isFinished) return;
+      isFinished = true;
+      try { ws.close(); } catch {}
+      rejectTTS(new Error('Edge TTS WebSocket timeout after 15s'));
+    }, 15000);
+
+    ws.on('open', () => {
+      const configMsg = 'Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}';
+      ws.send(configMsg, (err) => {
+        if (err) {
+          clearTimeout(timer);
+          isFinished = true;
+          try { ws.close(); } catch {}
+          return rejectTTS(err);
+        }
+        const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="vi-VN"><voice name="${voice}"><prosody pitch="${pitch}" rate="${rate}">${escaped}</prosody></voice></speak>`;
+        const ssmlMsg = `X-RequestId:${reqId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`;
+        ws.send(ssmlMsg);
+      });
+    });
+
+    ws.on('message', (msg, isBinary) => {
+      if (isBinary) {
+        const buf = Buffer.from(msg);
+        if (buf.length >= 2) {
+          const headerLen = buf.readUInt16BE(0);
+          if (buf.length > headerLen + 2) {
+            audioChunks.push(buf.subarray(headerLen + 2));
+          }
+        }
+      } else {
+        const textMsg = msg.toString();
+        if (textMsg.includes('Path:turn.end')) {
+          if (isFinished) return;
+          isFinished = true;
+          clearTimeout(timer);
+          try { ws.close(); } catch {}
+          const fullAudio = Buffer.concat(audioChunks);
+          if (!fullAudio.length) {
+            return rejectTTS(new Error('Received empty audio from Edge TTS'));
+          }
+          resolveTTS(fullAudio);
+        }
+      }
+    });
+
+    ws.on('error', err => {
+      if (isFinished) return;
+      isFinished = true;
+      clearTimeout(timer);
+      try { ws.close(); } catch {}
+      rejectTTS(err);
+    });
+
+    ws.on('close', () => {
+      if (isFinished) return;
+      isFinished = true;
+      clearTimeout(timer);
+      if (audioChunks.length > 0) {
+        resolveTTS(Buffer.concat(audioChunks));
+      } else {
+        rejectTTS(new Error('Edge TTS WebSocket closed prematurely'));
+      }
+    });
+  });
 }
 
 const server = createServer(async (req, res) => {
@@ -87,7 +189,7 @@ const server = createServer(async (req, res) => {
     // Endpoint: /api/status
     if (pathname === '/api/status') {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ status: 'ok', engine: 'msedge-tts', uptime: process.uptime() }));
+      res.end(JSON.stringify({ status: 'ok', engine: 'edge-direct-ws', uptime: process.uptime() }));
       return;
     }
 
@@ -118,11 +220,11 @@ const server = createServer(async (req, res) => {
       else if (/HoaiMy|Hoài My|Female|Nữ/i.test(rawVoice)) voice = 'vi-VN-HoaiMyNeural';
       else if (rawVoice.includes('Neural')) voice = rawVoice;
 
-      // Convert rate (e.g. 1.15) to percentage string (e.g. "+15%")
+      // Convert rate to percentage string
       const rateNum = Math.max(0.5, Math.min(2.0, parseFloat(rateParam) || 1.0));
       const ratePercent = `${rateNum >= 1 ? '+' : ''}${Math.round((rateNum - 1) * 100)}%`;
 
-      // Convert pitch (e.g. 1.05) to Hz or percentage
+      // Convert pitch to Hz
       const pitchNum = Math.max(0.5, Math.min(1.5, parseFloat(pitchParam) || 1.0));
       const pitchPercent = `${pitchNum >= 1 ? '+' : ''}${Math.round((pitchNum - 1) * 50)}Hz`;
 
@@ -141,63 +243,34 @@ const server = createServer(async (req, res) => {
       }
 
       try {
-        const synthesizeAudio = async () => {
-          const requestTts = new MsEdgeTTS();
-          try {
-            await requestTts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-          } catch {
-            voice = 'vi-VN-HoaiMyNeural';
-            await requestTts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-          }
-
-          const { audioStream } = requestTts.toStream(text, {
-            rate: ratePercent,
-            pitch: pitchPercent
-          });
-
-          const chunks = [];
-
-          return await new Promise((resolveAudio, rejectAudio) => {
-            audioStream.on('data', chunk => {
-              chunks.push(chunk);
-            });
-
-            audioStream.on('end', () => {
-              resolveAudio(Buffer.concat(chunks));
-            });
-
-            audioStream.on('error', err => {
-              console.error('Edge TTS audioStream error:', err);
-              rejectAudio(err);
-            });
-          });
-        };
-
         if (!pendingAudioCache.has(cacheKey)) {
-          pendingAudioCache.set(cacheKey, synthesizeAudio().finally(() => pendingAudioCache.delete(cacheKey)));
+          pendingAudioCache.set(
+            cacheKey,
+            synthesizeEdgeTTS(text, voice, ratePercent, pitchPercent).finally(() => pendingAudioCache.delete(cacheKey))
+          );
         }
 
         const fullBuffer = await pendingAudioCache.get(cacheKey);
-          if (!fullBuffer.length) {
-            console.error('Edge TTS returned empty audio');
-            res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
-            res.end('TTS returned empty audio');
-            return;
-          }
+        if (!fullBuffer || !fullBuffer.length) {
+          console.error('Edge TTS returned empty audio');
+          res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
+          res.end('TTS returned empty audio');
+          return;
+        }
 
-          if (audioCache.size >= MAX_CACHE_ITEMS) {
-            const firstKey = audioCache.keys().next().value;
-            audioCache.delete(firstKey);
-          }
-          audioCache.set(cacheKey, fullBuffer);
+        if (audioCache.size >= MAX_CACHE_ITEMS) {
+          const firstKey = audioCache.keys().next().value;
+          audioCache.delete(firstKey);
+        }
+        audioCache.set(cacheKey, fullBuffer);
 
-          res.writeHead(200, {
-            'Content-Type': 'audio/mpeg',
-            'Content-Length': fullBuffer.length,
-            'X-Cache': 'MISS',
-            'Cache-Control': 'public, max-age=86400'
-          });
-          res.end(fullBuffer);
+        res.writeHead(200, {
+          'Content-Type': 'audio/mpeg',
+          'Content-Length': fullBuffer.length,
+          'X-Cache': 'MISS',
+          'Cache-Control': 'public, max-age=86400'
+        });
+        res.end(fullBuffer);
       } catch (streamErr) {
         console.error('Edge TTS init error:', streamErr);
         if (!res.headersSent) {

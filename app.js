@@ -601,6 +601,15 @@
     select.value = state.voice;
   }
 
+  function syncEngineUI() {
+    $$('input[name="ttsEngine"]').forEach(radio => {
+      radio.checked = (radio.value === state.engine);
+    });
+    populateVoiceSelect();
+    updateEngineBadge();
+    saveSettings({ engine: state.engine, voice: state.voice });
+  }
+
   function getEdgeVoiceShortName() {
     let v = state.voice;
     if (!v || typeof v !== 'string' || !v.includes('Neural')) {
@@ -614,8 +623,7 @@
     return `${serverBaseUrl}/api/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voice)}&rate=${rate}&pitch=${pitch}`;
   }
 
-  // Edge audio must go through the local server. Browser-side Bing WebSocket
-  // connections are unstable and blocked/reset on many networks.
+  // Edge audio goes through the server endpoint
   async function generateClientEdgeAudioUrl(text, voice = 'vi-VN-HoaiMyNeural', rate = 1.0, pitch = 1.0) {
     return buildServerEdgeAudioUrl(text, voice, rate, pitch);
   }
@@ -639,7 +647,8 @@
       })
       .catch(err => {
         delete state.preloadedUrls[paraIdx];
-        throw err;
+        console.warn(`[Preload] Para ${paraIdx} skipped:`, err?.message || err);
+        return null;
       })
       .finally(() => {
         delete state.audioPreloadPromises[paraIdx];
@@ -648,7 +657,7 @@
     return state.audioPreloadPromises[paraIdx];
   }
 
-  // Preload next paragraphs by forcing the local server to generate/cache MP3 first.
+  // Preload next paragraphs by forcing server to generate/cache MP3 first
   async function preloadNextParagraphs(currentIdx) {
     if (state.engine !== 'edge') return;
     const chap = chapters[state.chapterIndex];
@@ -664,7 +673,7 @@
       if (!text) continue;
 
       try {
-        preloadServerEdgeAudio(targetIdx, text, voiceName);
+        preloadServerEdgeAudio(targetIdx, text, voiceName)?.catch(() => {});
       } catch {
         // Ignored in background preload
       }
@@ -800,6 +809,13 @@
         const attempts = Number(state.edgeRetryAttempts[paraIdx] || 0);
         if (attempts >= 2) {
           state.isBuffering = false;
+          if (speechApi) {
+            showToast('Lỗi máy chủ Edge TTS. Đang tự động chuyển sang Web Speech để tiếp tục…');
+            state.engine = 'webspeech';
+            syncEngineUI();
+            playParagraph(paraIdx);
+            return;
+          }
           state.isPaused = true;
           syncPlayerControlsUI();
           showToast(`Audio ${reason}. Bấm tiếp tục để thử lại.`);
@@ -885,11 +901,12 @@
 
       audio.src = audioUrl;
       audio.play().catch(err => {
+        if (err.name === 'AbortError') return;
         console.warn('Audio play() catch:', err);
         retryCurrentAudio('không phát được');
       });
 
-      // Eagerly preload next 2 paragraphs
+      // Eagerly preload next paragraphs
       preloadNextParagraphs(paraIdx);
       return;
     }

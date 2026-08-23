@@ -1,4 +1,4 @@
-param([string]$Source = 'D:\Extension\Vol9_VI.docx')
+param([string]$Source = (Join-Path $PSScriptRoot 'Vol9_VI_corrected.docx'))
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -95,7 +95,13 @@ for ($i = 0; $i -lt $headingNodes.Count; $i++) {
       foreach ($image in $nodes[$j].SelectNodes('.//a:blip/@r:embed', $ns)) { if ($imageTargets.ContainsKey($image.Value)) { $blocks += [ordered]@{ type = 'image'; src = "assets/$($imageTargets[$image.Value])" } } }
       $text = Get-Text $nodes[$j] $ns
       if ($text) {
-        $blocks += [ordered]@{ type = 'p'; text = $text; runs = @(Get-Runs $nodes[$j] $ns) }
+        $align = $nodes[$j].SelectSingleNode('./w:pPr/w:jc/@w:val', $ns)
+        $alignVal = if ($align) { $align.Value } else { '' }
+        $blockObj = [ordered]@{ type = 'p'; text = $text; runs = @(Get-Runs $nodes[$j] $ns) }
+        if ($alignVal -eq 'center' -or $text.Trim() -eq '✧₊ ✦₊ ✧' -or $text -match '^[✧✦₊\s*·•-]+$') {
+          $blockObj['align'] = 'center'
+        }
+        $blocks += $blockObj
         $wordCount += ($text -split '\s+').Count
       }
     }
@@ -111,6 +117,10 @@ $sourceZip.Dispose()
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-$json = $records | ConvertTo-Json -Depth 5 -Compress
-[System.IO.File]::WriteAllText((Join-Path $root 'chapters.js'), "window.CHAPTERS = $json;", [System.Text.Encoding]::UTF8)
-Write-Output "Đã tách $($records.Count) chương vào $chaptersDir"
+$json = $records | ConvertTo-Json -Depth 6 -Compress
+$code = "if (typeof window !== 'undefined') window.CHAPTERS = $json; if (typeof module !== 'undefined') module.exports = $json;"
+[System.IO.File]::WriteAllText((Join-Path $root 'chapters.js'), $code, [System.Text.Encoding]::UTF8)
+[System.IO.File]::WriteAllText((Join-Path $root 'js\chapters.js'), $code, [System.Text.Encoding]::UTF8)
+[System.IO.File]::WriteAllText((Join-Path $root 'public\chapters.js'), $code, [System.Text.Encoding]::UTF8)
+[System.IO.File]::WriteAllText((Join-Path $root 'public\js\chapters.js'), $code, [System.Text.Encoding]::UTF8)
+Write-Output "Đã tách $($records.Count) chương vào $chaptersDir và cập nhật toàn bộ file chapters.js"

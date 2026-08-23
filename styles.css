@@ -1149,6 +1149,34 @@ input[type="range"]::-webkit-slider-thumb:hover {
   background: var(--bg-surface-hover);
 }
 
+/* Scene Divider / Decorative Paragraphs (e.g. ✧₊ ✦₊ ✧) */
+.book-content p.scene-divider {
+  text-align: center !important;
+  margin: 2.2rem auto !important;
+  padding: 10px 0 !important;
+  letter-spacing: 0.4em !important;
+  color: var(--accent-primary) !important;
+  font-size: 1.25rem !important;
+  cursor: default !important;
+  user-select: none !important;
+  border-left: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  opacity: 0.92;
+  font-family: 'Arial Unicode MS', 'Segoe UI Symbol', sans-serif;
+}
+.book-content p.scene-divider:hover {
+  background: transparent !important;
+}
+.book-content p.scene-divider.reading-now {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+.book-content p.scene-divider.reading-now::before {
+  display: none !important;
+}
+
 /* Active Reading Highlight */
 .book-content p.reading-now {
   background: var(--reading-highlight);

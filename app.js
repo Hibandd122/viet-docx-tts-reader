@@ -268,6 +268,13 @@
     return map[name] || 'Montserrat Local';
   }
 
+  function isPlayableParagraph(text) {
+    if (!text || typeof text !== 'string') return false;
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+    return /[a-zA-Z0-9\u00C0-\u1EF9]/u.test(trimmed);
+  }
+
   function renderRuns(block) {
     if (!block.runs?.length) return escapeHtml(block.text || '');
     return block.runs.map(run => {
@@ -410,12 +417,14 @@
       }
       const pIdx = pCount++;
       const isBookmarked = isParagraphBookmarked(idx, pIdx);
+      const isDivider = block.align === 'center' || !isPlayableParagraph(block.text);
+      const cls = isDivider ? 'scene-divider' : '';
       return `
-        <p id="para-${pIdx}" data-paragraph="${pIdx}">
+        <p id="para-${pIdx}" class="${cls}" data-paragraph="${pIdx}">
           ${renderRuns(block)}
-          <button class="para-action-btn ${isBookmarked ? 'active' : ''}" data-bookmark-btn="${pIdx}" title="Đánh dấu đoạn này">
+          ${isDivider ? '' : `<button class="para-action-btn ${isBookmarked ? 'active' : ''}" data-bookmark-btn="${pIdx}" title="Đánh dấu đoạn này">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="${isBookmarked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
-          </button>
+          </button>`}
         </p>
       `;
     }).join('');
@@ -886,7 +895,7 @@
       if (state.preloadedUrls[targetIdx]) continue;
 
       const text = chap.paragraphs[targetIdx]?.trim();
-      if (!text) continue;
+      if (!text || !isPlayableParagraph(text)) continue;
 
       if (!state.audioPreloadPromises[targetIdx]) {
         state.audioPreloadPromises[targetIdx] = fetchAndCacheParagraphAudio(
@@ -962,8 +971,8 @@
     const chap = chapters[state.chapterIndex];
     if (!chap || !chap.paragraphs || !chap.paragraphs.length) return;
 
-    // Skip empty paragraphs automatically
-    while (paraIdx < chap.paragraphs.length && !chap.paragraphs[paraIdx]?.trim()) {
+    // Skip empty or non-pronounceable decorative symbol paragraphs (e.g. "✧₊ ✦₊ ✧")
+    while (paraIdx < chap.paragraphs.length && !isPlayableParagraph(chap.paragraphs[paraIdx])) {
       paraIdx++;
     }
 

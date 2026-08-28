@@ -126,12 +126,15 @@
   }
 
   function saveReadingProgress(chapIdx, paraIdx) {
-    state.progressMap[chapIdx] = Math.max(0, paraIdx);
+    if (typeof chapIdx !== 'number' || chapIdx < 0 || typeof paraIdx !== 'number' || paraIdx < 0) return;
+    state.progressMap[chapIdx] = paraIdx;
     const toSave = {
       lastChapter: chapIdx,
       chapters: state.progressMap
     };
-    try { localStorage.setItem(STORAGE_PROGRESS, JSON.stringify(toSave)); } catch {}
+    try { localStorage.setItem(STORAGE_PROGRESS, JSON.stringify(toSave)); } catch (e) {
+      console.warn('Storage save failed:', e);
+    }
     updateOverallProgress();
     updateChapterListProgress(chapIdx);
   }
@@ -367,9 +370,25 @@
     if (clearBtn) clearBtn.hidden = !clean;
   }
 
+  let isProgrammaticScroll = false;
+
   function selectChapter(idx, restorePosition = true) {
     if (!chapters[idx]) return;
-    stopPlayback();
+
+    // Cleanly stop any ongoing playback without wiping stored reading positions
+    state.token++;
+    state.isPlaying = false;
+    state.isPaused = false;
+    if (state.masterAudio) {
+      state.masterAudio.pause();
+      state.masterAudio.removeAttribute('src');
+      state.masterAudio.load();
+    }
+    if (speechApi) speechApi.cancel();
+    if (isExtension) chrome.runtime.sendMessage({ type: 'TTS_CONTROL', action: 'stop' });
+    clearInterval(speechKeepAliveTimer);
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
+    syncPlayerControlsUI();
 
     state.chapterIndex = idx;
     const chap = chapters[idx];
@@ -443,16 +462,20 @@
       const targetEl = $(`para-${savedPara}`);
       if (targetEl) {
         targetEl.classList.add('resume-point');
+        isProgrammaticScroll = true;
         setTimeout(() => {
           targetEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
         }, 150);
         setTimeout(() => {
           targetEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          setTimeout(() => { isProgrammaticScroll = false; }, 400);
         }, 450);
       }
       updateNowReadingUI(`Tiếp tục từ đoạn ${savedPara + 1}/${totalParas}`);
     } else {
+      isProgrammaticScroll = true;
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => { isProgrammaticScroll = false; }, 400);
       updateNowReadingUI(`Sẵn sàng đọc (${totalParas} đoạn)`);
     }
 
@@ -475,16 +498,18 @@
 
   function markActiveParagraph(paraIdx) {
     $$('.book-content p.reading-now, .book-content p.resume-point').forEach(p => p.classList.remove('reading-now', 'resume-point'));
-    const target = $(`para-${paraIdx}`);
-    if (target) {
-      target.classList.add('reading-now');
-      if (state.autoScroll) {
-        target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (paraIdx >= 0) {
+      const target = $(`para-${paraIdx}`);
+      if (target) {
+        target.classList.add('reading-now');
+        if (state.autoScroll) {
+          target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
       }
+      const total = getParagraphTotal(chapters[state.chapterIndex]);
+      updateChapterProgressBar(paraIdx, total);
+      saveReadingProgress(state.chapterIndex, paraIdx);
     }
-    const total = getParagraphTotal(chapters[state.chapterIndex]);
-    updateChapterProgressBar(paraIdx, total);
-    saveReadingProgress(state.chapterIndex, paraIdx);
   }
 
   // ==========================================================================
@@ -1270,11 +1295,15 @@
     if (isExtension) {
       chrome.runtime.sendMessage({ type: 'TTS_CONTROL', action: 'stop' });
     }
-    clearInterval(speechKeepAliveTimer);
-    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
-
     syncPlayerControlsUI();
-    markActiveParagraph(-1);
+
+    // Remove active glowing indicator, but keep resume point on the current paragraph
+    $$('.book-content p.reading-now').forEach(p => p.classList.remove('reading-now'));
+    const curPara = state.paragraphIndex >= 0 ? state.paragraphIndex : getSavedParagraphForChapter(state.chapterIndex);
+    if (curPara >= 0) {
+      $(`para-${curPara}`)?.classList.add('resume-point');
+    }
+
     updatePlayerTimeline(0, 1);
     updateStatus('Đã dừng');
   }
@@ -1999,20 +2028,30 @@
     // Scroll-Spy to save visual reading progress when not playing audio
     let scrollSpyTimer = null;
     window.addEventListener('scroll', () => {
-      if (state.isPlaying) return;
+      if (state.isPlaying || isProgrammaticScroll) return;
       clearTimeout(scrollSpyTimer);
       scrollSpyTimer = setTimeout(() => {
+        if (state.isPlaying || isProgrammaticScroll) return;
         const midX = window.innerWidth / 2;
-        const midY = window.innerHeight * 0.35;
-        const el = document.elementFromPoint(midX, midY)?.closest('p[data-paragraph]');
-        if (el) {
-          const pIdx = Number(el.dataset.paragraph);
+        const points = [window.innerHeight * 0.25, window.innerHeight * 0.35, window.innerHeight * 0.5];
+        let foundPara = null;
+        for (const y of points) {
+          const el = document.elementFromPoint(midX, y)?.closest('p[data-paragraph]');
+          if (el) {
+            foundPara = el;
+            break;
+          }
+        }
+        if (foundPara) {
+          const pIdx = Number(foundPara.dataset.paragraph);
           if (!isNaN(pIdx) && pIdx >= 0 && pIdx !== state.paragraphIndex) {
             state.paragraphIndex = pIdx;
             saveReadingProgress(state.chapterIndex, pIdx);
+            const total = getParagraphTotal(chapters[state.chapterIndex]);
+            updateChapterProgressBar(pIdx, total);
           }
         }
-      }, 350);
+      }, 250);
     }, { passive: true });
 
     // Always persist latest reading position when closing tab or switching app

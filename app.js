@@ -72,7 +72,7 @@
     pageWidth: Number(savedSettings.pageWidth ?? 880),
     textAlign: savedSettings.textAlign || 'left',
     autoScroll: savedSettings.autoScroll !== false,
-    autoNext: savedSettings.autoNext === true,
+    autoNext: savedSettings.autoNext !== false,
     autoPreloadNext: savedSettings.autoPreloadNext !== false,
     dropCap: savedSettings.dropCap !== false,
     isZenMode: false,
@@ -1010,16 +1010,20 @@
       }
 
       if (state.autoNext && state.chapterIndex < chapters.length - 1) {
-        showToast(`Đang chuyển sang Phần ${state.chapterIndex + 2}…`);
-        selectChapter(state.chapterIndex + 1, false);
+        const nextChapIdx = state.chapterIndex + 1;
+        showToast(`Đã đọc hết Phần ${state.chapterIndex + 1}. Đang tự động chuyển sang Phần ${nextChapIdx + 1}… ⏭️`, 3500);
+        selectChapter(nextChapIdx, false);
         state.paragraphIndex = 0;
-        playParagraph(0);
+        saveReadingProgress(nextChapIdx, 0);
+        setTimeout(() => {
+          playParagraph(0);
+        }, 300);
         return;
       }
 
       stopPlayback();
-      showToast('🎉 Đã đọc xong toàn bộ chương!');
-      updateNowReadingUI('Đã đọc xong chương');
+      showToast('🎉 Đã đọc xong toàn bộ tác phẩm!');
+      updateNowReadingUI('Đã hoàn thành toàn bộ tác phẩm');
       return;
     }
 

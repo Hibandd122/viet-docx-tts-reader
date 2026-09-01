@@ -11,7 +11,21 @@
 
   if (typeof window === 'undefined') return;
 
-  const chapters = window.CHAPTERS || [];
+    // Multi-Volume Support
+  function getActiveVolumeId() {
+    return state?.volumeId || window.ACTIVE_VOLUME_ID || 'vol10';
+  }
+
+  function getActiveVolumeData() {
+    const volId = getActiveVolumeId();
+    if (window.VOLUMES && window.VOLUMES[volId]) {
+      return window.VOLUMES[volId];
+    }
+    return { id: volId, title: 'Tập ' + volId, chapters: window.CHAPTERS || [] };
+  }
+
+  let chapters = (window.VOLUMES && window.VOLUMES[window.ACTIVE_VOLUME_ID || 'vol10']) ? window.VOLUMES[window.ACTIVE_VOLUME_ID || 'vol10'].chapters : (window.CHAPTERS || []);
+
   const $ = id => document.getElementById(id);
   const $$ = sel => document.querySelectorAll(sel);
 
@@ -40,7 +54,8 @@
 
   // App State
   const state = {
-    // Reading position
+    // Volume and Reading position
+    volumeId: savedProgress.lastVolume || window.ACTIVE_VOLUME_ID || 'vol10',
     chapterIndex: Math.min(Math.max(0, Number(savedProgress.lastChapter ?? 0)), Math.max(0, chapters.length - 1)),
     paragraphIndex: -1,
     progressMap: { ...(savedProgress.chapters || {}) },
@@ -129,13 +144,14 @@
     if (typeof chapIdx !== 'number' || chapIdx < 0 || typeof paraIdx !== 'number' || paraIdx < 0) return;
     state.progressMap[chapIdx] = paraIdx;
     const toSave = {
+      lastVolume: state.volumeId,
       lastChapter: chapIdx,
       chapters: state.progressMap
     };
     try { localStorage.setItem(STORAGE_PROGRESS, JSON.stringify(toSave)); } catch (e) {
       console.warn('Storage save failed:', e);
     }
-    updateOverallProgress();
+    updateOverallProgress(); renderQuickChapterChips();
     updateChapterListProgress(chapIdx);
   }
 
@@ -287,6 +303,101 @@
       const style = f || b || i ? ` style="${f}${b}${i}"` : '';
       return `<span${style}>${escapeHtml(run.text)}</span>`;
     }).join('');
+  }
+
+  
+  // ==========================================================================
+  // QUICK CHAPTER JUMP & CHIPS RENDERING
+  // ==========================================================================
+  function renderQuickChapterChips() {
+    const container = $('quickChapterChips');
+    if (!container) return;
+    container.innerHTML = '';
+
+    chapters.forEach((chap, idx) => {
+      const chip = document.createElement('button');
+      chip.className = `quick-chip ${idx === state.chapterIndex ? 'active' : ''}`;
+      chip.dataset.chapter = idx;
+      
+      // Short label (e.g., 'Chương 1', 'Truyện ngắn', 'Lời bạt')
+      let shortTitle = chap.title || `Chương ${idx + 1}`;
+      if (shortTitle.includes(':')) {
+        shortTitle = shortTitle.split(':')[0].trim();
+      }
+      
+      chip.innerHTML = `<span>${shortTitle}</span>`;
+      chip.title = chap.title;
+      chip.addEventListener('click', () => {
+        selectChapter(idx, true);
+        // Scroll active chip into view smoothly
+        chip.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      });
+      container.appendChild(chip);
+    });
+
+    // Auto-scroll active chip into view
+    const activeChip = container.querySelector('.quick-chip.active');
+    if (activeChip) {
+      setTimeout(() => {
+        activeChip.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }, 100);
+    }
+  }
+
+  function updateActiveQuickChip(chapIdx) {
+    $$('.quick-chip').forEach((chip, idx) => {
+      chip.classList.toggle('active', idx === chapIdx);
+      if (idx === chapIdx) {
+        chip.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    });
+  }
+
+  function openQuickJumpModal() {
+    const modal = $('quickJumpModal');
+    const grid = $('quickJumpGrid');
+    const title = $('quickJumpModalTitle');
+    if (!modal || !grid) return;
+
+    const volData = getActiveVolumeData();
+    if (title) title.textContent = `⚡ Nhảy Đến Chương · ${volData.title}`;
+
+    grid.innerHTML = '';
+    chapters.forEach((chap, idx) => {
+      const card = document.createElement('div');
+      card.className = `jump-card ${idx === state.chapterIndex ? 'active' : ''}`;
+      
+      const savedP = getSavedParagraphForChapter(idx);
+      const totalP = getParagraphTotal(chap);
+      const percent = totalP > 0 ? Math.min(100, Math.round(((savedP + 1) / totalP) * 100)) : 0;
+
+      card.innerHTML = `
+        <div class="jump-card-header">
+          <span class="jump-card-num">Phần ${idx + 1}</span>
+          <span class="jump-card-badge">${idx === state.chapterIndex ? 'Đang đọc' : (percent > 0 ? percent + '%' : 'Chưa đọc')}</span>
+        </div>
+        <div class="jump-card-title">${chap.title}</div>
+        <div class="jump-card-meta">
+          <span>${chap.wordCount.toLocaleString()} từ</span>
+          <span>~${chap.estMinutes} phút đọc</span>
+        </div>
+      `;
+
+      card.addEventListener('click', () => {
+        modal.hidden = true;
+        selectChapter(idx, true);
+        showToast(`Đã chuyển đến: ${chap.title}`);
+      });
+
+      grid.appendChild(card);
+    });
+
+    modal.hidden = false;
+  }
+
+  function closeQuickJumpModal() {
+    const modal = $('quickJumpModal');
+    if (modal) modal.hidden = true;
   }
 
   function renderChapterList() {
@@ -1518,6 +1629,37 @@
   // EVENT LISTENERS & WIRING
   // ==========================================================================
   function initEventListeners() {
+    // Quick Chapter Jump Modal Events
+    $('quickChapterModalBtn')?.addEventListener('click', openQuickJumpModal);
+    $('quickJumpCloseBtn')?.addEventListener('click', closeQuickJumpModal);
+    $('quickJumpBackdrop')?.addEventListener('click', closeQuickJumpModal);
+
+    // Volume Picker Dropdown
+    const volPickerBtn = $('volumePickerBtn');
+    const volDropdownMenu = $('volumeDropdownMenu');
+    if (volPickerBtn && volDropdownMenu) {
+      volPickerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        volDropdownMenu.hidden = !volDropdownMenu.hidden;
+      });
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.volume-dropdown-wrap')) {
+          volDropdownMenu.hidden = true;
+        }
+      });
+      $$('.volume-opt').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const volId = btn.dataset.volume;
+          switchVolume(volId, 0);
+        });
+      });
+    }
+
+    // Color Gallery Modal
+    $('colorGalleryBtn')?.addEventListener('click', openColorGallery);
+    $('colorGalleryCloseBtn')?.addEventListener('click', closeColorGallery);
+    $('colorGalleryBackdrop')?.addEventListener('click', closeColorGallery);
+
     // --- Topbar Actions & Mobile Drawer ---
     $('sidebarToggleBtn')?.addEventListener('click', () => toggleSidebar());
     $('sidebarCloseBtn')?.addEventListener('click', () => toggleSidebar(false));
@@ -2005,7 +2147,7 @@
       } else if (e.key === '?') {
         $('shortcutsModal').hidden = false;
       } else if (e.key === 'Escape') {
-        closeLightbox();
+        closeLightbox(); closeColorGallery(); closeQuickJumpModal();
         $('sleepTimerModal').hidden = true;
         $('shortcutsModal').hidden = true;
         if (state.isPlaying) stopPlayback();
@@ -2080,6 +2222,94 @@
     }
   }
 
+  
+  // ==========================================================================
+  // MULTI-VOLUME SWITCHER & COLOR GALLERY
+  // ==========================================================================
+  function switchVolume(newVolId, targetChapter = 0) {
+    if (!window.VOLUMES || !window.VOLUMES[newVolId]) return;
+    if (state.volumeId === newVolId && state.chapterIndex === targetChapter) return;
+
+    if (state.isPlaying) {
+      stopPlayback();
+    }
+
+    state.volumeId = newVolId;
+    window.ACTIVE_VOLUME_ID = newVolId;
+    chapters = window.VOLUMES[newVolId].chapters || [];
+    window.CHAPTERS = chapters;
+
+    // Update Volume UI
+    const volData = window.VOLUMES[newVolId];
+    if ($('volumePickerLabel')) $('volumePickerLabel').textContent = newVolId === 'vol10' ? 'Tập 10' : 'Tập 9';
+    if ($('appVolumeBadge')) $('appVolumeBadge').textContent = newVolId === 'vol10' ? 'TẬP 10' : 'TẬP 9';
+    if ($('volCardTitle')) $('volCardTitle').textContent = volData.title;
+    if ($('volCardSub')) $('volCardSub').textContent = `${chapters.length} Phần · Tiếng Việt Pro`;
+    if ($('volCardCover')) $('volCardCover').src = volData.cover || 'assets/image1.jpg';
+
+    // Update active state in volume options dropdown
+    $$('.volume-opt').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.volume === newVolId);
+    });
+
+    // Close dropdown
+    const dropdown = $('volumeDropdownMenu');
+    if (dropdown) dropdown.hidden = true;
+
+    // Reset progress map for this volume if needed
+    state.chapterIndex = Math.min(Math.max(0, targetChapter), Math.max(0, chapters.length - 1));
+    state.paragraphIndex = -1;
+
+    // Re-render
+    renderChapterList();
+    updateChapterBadgeCount(); updateActiveQuickChip(index);
+    updateOverallProgress();
+    selectChapter(state.chapterIndex, true);
+
+    // Save to storage
+    saveReadingProgress(state.chapterIndex, 0);
+
+    showToast(`Đã chuyển sang ${volData.title}`);
+  }
+
+  function openColorGallery() {
+    const volData = getActiveVolumeData();
+    const modal = $('colorGalleryModal');
+    const grid = $('colorGalleryGrid');
+    const title = $('galleryModalTitle');
+    if (!modal || !grid) return;
+
+    if (title) title.textContent = `🎨 Tranh Màu Đầu Sách · ${volData.title}`;
+    grid.innerHTML = '';
+
+    const images = volData.colorGallery || [];
+    if (images.length === 0) {
+      grid.innerHTML = '<p class="empty-notice">Không có tranh màu đầu sách cho tập này.</p>';
+    } else {
+      images.forEach((imgSrc, idx) => {
+        const card = document.createElement('div');
+        card.className = 'gallery-card';
+        card.innerHTML = `
+          <div class="gallery-thumb-wrap">
+            <img src="${imgSrc}" alt="Tranh màu ${idx + 1}" loading="lazy">
+          </div>
+          <div class="gallery-card-info">Tranh màu #${idx + 1}</div>
+        `;
+        card.addEventListener('click', () => {
+          openLightbox(imgSrc, `Tranh màu #${idx + 1} - ${volData.title}`);
+        });
+        grid.appendChild(card);
+      });
+    }
+
+    modal.hidden = false;
+  }
+
+  function closeColorGallery() {
+    const modal = $('colorGalleryModal');
+    if (modal) modal.hidden = true;
+  }
+
   function switchSidebarTab(tabName) {
     $$('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabName));
     $$('.tab-pane').forEach(pane => pane.hidden = true);
@@ -2127,6 +2357,25 @@
     updateBookmarkBadge();
     renderChapterList();
     updateCacheStatsUI();
+
+    
+    // Parse URL query params (e.g. ?vol=vol10&ch=2)
+    const urlParams = new URLSearchParams(window.location.search);
+    const paramVol = urlParams.get('vol');
+    const paramCh = urlParams.get('ch') || urlParams.get('chapter');
+    if (paramVol && window.VOLUMES && window.VOLUMES[paramVol]) {
+      state.volumeId = paramVol;
+      window.ACTIVE_VOLUME_ID = paramVol;
+      chapters = window.VOLUMES[paramVol].chapters || [];
+      window.CHAPTERS = chapters;
+    }
+    if (paramCh !== null) {
+      const targetCh = parseInt(paramCh, 10);
+      if (!isNaN(targetCh)) {
+        // support both 1-indexed (ch=1..12) and 0-indexed (ch=0..11)
+        state.chapterIndex = (targetCh >= 1 && targetCh <= chapters.length) ? (targetCh - 1) : Math.min(Math.max(0, targetCh), chapters.length - 1);
+      }
+    }
 
     // Select initial chapter
     selectChapter(state.chapterIndex, true);

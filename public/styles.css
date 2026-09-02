@@ -533,7 +533,7 @@ a {
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  height: calc(var(--app-height) - var(--topbar-height));
+  height: calc(var(--app-height) - var(--topbar-height) - var(--player-height, 90px));
   position: sticky;
   top: var(--topbar-height);
   z-index: 50;
@@ -601,10 +601,10 @@ a {
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
   overscroll-behavior-y: contain;
-  padding: 16px 16px max(80px, env(safe-area-inset-bottom, 32px)) 16px;
+  padding: 16px 16px 120px 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 .tab-pane[hidden] { display: none !important; }
 
@@ -871,7 +871,7 @@ a {
   gap: 8px;
 }
 
-.form-select {
+.form-select, .form-input {
   height: 42px;
   padding: 0 12px;
   border-radius: var(--radius-ctrl);
@@ -881,8 +881,22 @@ a {
   font-size: 13.5px;
   font-family: inherit;
 }
-.form-select:focus {
+.form-select:focus, .form-input:focus {
   border-color: var(--accent-primary);
+  background: var(--bg-surface-hover);
+}
+.field-hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+.field-hint code {
+  font-family: monospace;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: var(--accent-primary);
 }
 
 /* Sliders */

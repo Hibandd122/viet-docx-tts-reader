@@ -60,6 +60,8 @@ const requiredIds = [
   'tabContentSettings',
   'voiceSelect',
   'voiceTestBtn',
+  'customVoiceInput',
+  'applyCustomVoiceBtn',
   'rateValue',
   'rate',
   'fontSizeValue',

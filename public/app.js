@@ -2012,6 +2012,38 @@
       showToast(`Đã chọn: ${e.target.options[e.target.selectedIndex]?.text || state.voice}`);
     });
 
+    const customVoiceInput = $('customVoiceInput');
+    const applyCustomVoiceBtn = $('applyCustomVoiceBtn');
+    if (customVoiceInput && applyCustomVoiceBtn) {
+      applyCustomVoiceBtn.onclick = () => {
+        const val = customVoiceInput.value.trim();
+        if (!val) {
+          showToast('Vui lòng nhập tên giọng đọc');
+          return;
+        }
+        state.voice = val;
+        if (val.startsWith('vi-VN-') && val.includes('Neural')) {
+          state.engine = 'edge';
+        }
+        saveSettings({ voice: state.voice, engine: state.engine });
+
+        const select = $('voiceSelect');
+        if (select) {
+          let opt = Array.from(select.options).find(o => o.value === val);
+          if (!opt) {
+            opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = `⭐ Tùy chỉnh: ${val}`;
+            select.appendChild(opt);
+          }
+          select.value = val;
+        }
+
+        updatePlayerStatusUI();
+        showToast(`Đã áp dụng giọng: ${val}`);
+      };
+    }
+
     $$('input[name="ttsEngine"]').forEach(radio => {
       radio.onchange = (e) => {
         state.engine = e.target.value;

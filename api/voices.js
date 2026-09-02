@@ -16,7 +16,7 @@ const FALLBACK_VOICES = [
   }
 ];
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -36,7 +36,7 @@ module.exports = async (req, res) => {
         if (response.ok) {
           const list = await response.json();
           const vi = list.filter(v =>
-            (v.Locale && (v.Locale.startsWith('vi') || v.Locale.startsWith('en'))) ||
+            (v.Locale && v.Locale.startsWith('vi')) ||
             /vietnamese|tiếng việt/i.test(v.FriendlyName || '')
           );
           if (vi && vi.length) cachedVoices = vi;
@@ -52,5 +52,5 @@ module.exports = async (req, res) => {
 
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400');
-  return res.status(200).json({ ok: true, voices });
-};
+  return res.status(200).json(voices);
+}

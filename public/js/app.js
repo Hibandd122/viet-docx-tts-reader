@@ -1660,52 +1660,71 @@
     
     select.innerHTML = '';
     
+    // Default High-Quality Edge Neural Voices
+    const defaultEdgeVoices = [
+      { ShortName: 'vi-VN-HoaiMyNeural', FriendlyName: 'Microsoft Hoài My (Nữ - Tự nhiên AI)' },
+      { ShortName: 'vi-VN-NamMinhNeural', FriendlyName: 'Microsoft Nam Minh (Nam - Tự nhiên AI)' }
+    ];
+    
     try {
       const res = await fetch(`${serverBaseUrl}/api/voices`, { signal: AbortSignal.timeout(3000) });
       if (res.ok) {
-        state.edgeVoices = await res.json();
+        const list = await res.json();
+        state.edgeVoices = Array.isArray(list) && list.length > 0 ? list : defaultEdgeVoices;
+      } else {
+        state.edgeVoices = defaultEdgeVoices;
       }
     } catch {
-      state.edgeVoices = [
-        { ShortName: 'vi-VN-HoaiMyNeural', FriendlyName: 'Microsoft Hoài My (Nữ - Tự nhiên)' },
-        { ShortName: 'vi-VN-NamMinhNeural', FriendlyName: 'Microsoft Nam Minh (Nam - Tự nhiên)' }
-      ];
+      state.edgeVoices = defaultEdgeVoices;
     }
     
-    if (state.edgeVoices.length > 0) {
-      const optGroup = document.createElement('optgroup');
-      optGroup.label = '⚡ Microsoft Neural AI (Chuẩn Studio)';
-      state.edgeVoices.forEach(v => {
-        const opt = document.createElement('option');
-        opt.value = v.ShortName;
-        opt.textContent = v.FriendlyName || v.ShortName;
-        if (v.ShortName === state.voice) opt.selected = true;
-        optGroup.appendChild(opt);
-      });
-      select.appendChild(optGroup);
-    }
+    const edgeGroup = document.createElement('optgroup');
+    edgeGroup.label = '⚡ Microsoft Edge AI Neural (Studio Tự Nhiên)';
+    state.edgeVoices.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.ShortName;
+      opt.textContent = v.FriendlyName || v.ShortName;
+      if (v.ShortName === state.voice) opt.selected = true;
+      edgeGroup.appendChild(opt);
+    });
+    select.appendChild(edgeGroup);
     
+    // Web Speech Voices (Trình duyệt nội bộ)
     if ('speechSynthesis' in window) {
       const populateWeb = () => {
-        const voices = window.speechSynthesis.getVoices();
-        const viVoices = voices.filter(v => v.lang.startsWith('vi') || /vietnam/i.test(v.name));
+        // Clear previous web speech optgroup if present
+        const oldGroup = select.querySelector('optgroup[data-type="webspeech"]');
+        if (oldGroup) oldGroup.remove();
+
+        const voices = window.speechSynthesis.getVoices() || [];
+        const viVoices = voices.filter(v => (v.lang && v.lang.startsWith('vi')) || /vietnam|tiếng việt/i.test(v.name));
+        
         if (viVoices.length > 0) {
-          const optGroup = document.createElement('optgroup');
-          optGroup.label = '🌐 Web Speech Trình Duyệt';
+          const webGroup = document.createElement('optgroup');
+          webGroup.label = '🌐 Giọng đọc Trình duyệt (Web Speech API)';
+          webGroup.dataset.type = 'webspeech';
           viVoices.forEach(v => {
             const opt = document.createElement('option');
             opt.value = v.voiceURI || v.name;
-            opt.textContent = v.name;
-            optGroup.appendChild(opt);
+            opt.textContent = `${v.name} (${v.lang})`;
+            if (opt.value === state.voice) opt.selected = true;
+            webGroup.appendChild(opt);
           });
-          select.appendChild(optGroup);
+          select.appendChild(webGroup);
         }
       };
+
       populateWeb();
       window.speechSynthesis.onvoiceschanged = populateWeb;
     }
     
+    // Ensure selected voice is synced with active engine
+    if (state.voice.startsWith('vi-VN-') && state.voice.includes('Neural')) {
+      state.engine = 'edge';
+    }
+    
     setStatusState('READY', 'Sẵn sàng đọc');
+    updatePlayerStatusUI();
   }
 
   // ==========================================================================
@@ -1978,9 +1997,19 @@
     });
 
     $('voiceSelect')?.addEventListener('change', (e) => {
-      state.voice = e.target.value;
-      saveSettings({ voice: state.voice });
+      const selectedVal = e.target.value;
+      state.voice = selectedVal;
+      
+      // Auto-switch engine based on voice type
+      if (selectedVal.startsWith('vi-VN-') && selectedVal.includes('Neural')) {
+        state.engine = 'edge';
+      } else {
+        state.engine = 'webspeech';
+      }
+      
+      saveSettings({ voice: state.voice, engine: state.engine });
       updatePlayerStatusUI();
+      showToast(`Đã chọn: ${e.target.options[e.target.selectedIndex]?.text || state.voice}`);
     });
 
     $$('input[name="ttsEngine"]').forEach(radio => {
@@ -1993,13 +2022,16 @@
       };
     });
 
-    $('voiceTestBtn')?.addEventListener('click', () => {
+    $('voiceTestBtn')?.addEventListener('click', async () => {
       stopPlayback();
-      const testText = 'Xin chào, đây là giọng đọc thử nghiệm của Thiên Sứ Nhà Bên.';
+      const pGen = nextPlaybackGeneration();
+      const cGen = chapterGeneration;
+      const testText = 'Xin chào bạn, đây là giọng đọc thử nghiệm của Thiên Sứ Nhà Bên.';
+      showToast('🔊 Đang phát giọng đọc mẫu…');
       if (state.engine === 'edge') {
-        playEdgeTTS(testText, -99, 9999, 9999);
+        await playEdgeTTS(testText, -99, pGen, cGen);
       } else {
-        playWebSpeechTTS(testText, -99, 9999, 9999);
+        playWebSpeechTTS(testText, -99, pGen, cGen);
       }
     });
 

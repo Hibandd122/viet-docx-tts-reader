@@ -249,7 +249,6 @@ body {
 /* Body scroll lock when mobile sheet is open */
 body.scroll-locked {
   overflow: hidden !important;
-  touch-action: none;
 }
 
 /* Focus Visible Accessibility */
@@ -573,6 +572,7 @@ a {
   gap: 4px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
 }
 .tab-btn {
   flex: 1;
@@ -595,15 +595,18 @@ a {
 .tab-badge { font-size: 11px; opacity: 0.85; }
 
 .tab-pane {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 16px;
+  touch-action: pan-y;
+  overscroll-behavior-y: contain;
+  padding: 16px 16px max(80px, env(safe-area-inset-bottom, 32px)) 16px;
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
-.tab-pane[hidden] { display: none; }
+.tab-pane[hidden] { display: none !important; }
 
 /* Volume Info Card */
 .volume-info-card {
@@ -1965,6 +1968,7 @@ body.zen-mode .reader-area { padding-top: 36px; }
     width: 100%;
     max-width: 100%;
     height: 90dvh;
+    max-height: 90dvh;
     border-radius: 20px 20px 0 0;
     border-right: none;
     border-top: 1px solid var(--border-medium);
@@ -1972,11 +1976,17 @@ body.zen-mode .reader-area { padding-top: 36px; }
     z-index: 100;
     transform: translateY(100%);
     transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
   .sidebar.open {
     transform: translateY(0);
   }
-  .sidebar-mobile-header { display: flex; }
+  .sidebar-mobile-header {
+    display: flex;
+    flex-shrink: 0;
+  }
   
   .sidebar-backdrop {
     position: fixed;

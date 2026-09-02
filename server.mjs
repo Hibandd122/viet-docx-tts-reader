@@ -77,16 +77,19 @@ async function getAvailableVoices() {
   return FALLBACK_VOICES;
 }
 
+function generateSecMsGec() {
+  const ticks = Math.floor(Date.now() / 1000) + 11644473600;
+  const rounded = ticks - (ticks % 300);
+  const windowsTicks = BigInt(rounded) * 10000000n;
+  const data = Buffer.from(`${windowsTicks.toString()}${TRUSTED_TOKEN}`, 'utf-8');
+  return crypto.createHash('sha256').update(data).digest('hex').toUpperCase();
+}
+
 function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pitch = '+0Hz') {
   return new Promise((resolveTTS, rejectTTS) => {
-    const ticks = Math.floor(Date.now() / 1000) + 11644473600;
-    const rounded = ticks - (ticks % 300);
-    const windowsTicks = rounded * 10000000;
-    const data = new TextEncoder().encode(`${windowsTicks}${TRUSTED_TOKEN}`);
-    const hash = crypto.createHash('sha256').update(data).digest('hex').toUpperCase();
-
     const reqId = crypto.randomUUID().replace(/-/g, '');
     const connId = crypto.randomUUID().replace(/-/g, '');
+    const hash = generateSecMsGec();
     const url = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_TOKEN}&Sec-MS-GEC=${hash}&Sec-MS-GEC-Version=1-143.0.3650.96&ConnectionId=${connId}`;
 
     const ws = new WebSocket(url, {
@@ -119,34 +122,39 @@ function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pit
           return rejectTTS(err);
         }
         const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="vi-VN"><voice name="${voice}"><prosody pitch="${pitch}" rate="${rate}">${escaped}</prosody></voice></speak>`;
+        const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='vi-VN'><voice name='${voice}'><prosody pitch='${pitch}' rate='${rate}'>${escaped}</prosody></voice></speak>`;
         const ssmlMsg = `X-RequestId:${reqId}\r\nX-Timestamp:${date}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`;
         ws.send(ssmlMsg);
       });
     });
 
-    ws.on('message', (msg, isBinary) => {
-      if (isBinary) {
-        const buf = Buffer.from(msg);
-        if (buf.length >= 2) {
-          const headerLen = buf.readUInt16BE(0);
-          if (buf.length > headerLen + 2) {
-            audioChunks.push(buf.subarray(headerLen + 2));
+    ws.on('message', (msg) => {
+      const buf = Buffer.from(msg);
+      if (buf.length >= 2) {
+        const headLen = buf.readUInt16BE(0);
+        if (headLen > 0 && headLen + 2 <= buf.length) {
+          const headStr = buf.subarray(2, 2 + headLen).toString('utf-8');
+          if (headStr.includes('Path:audio')) {
+            const audio = buf.subarray(2 + headLen);
+            if (audio.length > 0) {
+              audioChunks.push(audio);
+            }
+            return;
           }
         }
-      } else {
-        const textMsg = msg.toString();
-        if (textMsg.includes('Path:turn.end')) {
-          if (isFinished) return;
-          isFinished = true;
-          clearTimeout(timer);
-          try { ws.close(); } catch {}
-          const fullAudio = Buffer.concat(audioChunks);
-          if (!fullAudio.length) {
-            return rejectTTS(new Error('Received empty audio from Edge TTS'));
-          }
-          resolveTTS(fullAudio);
+      }
+
+      const str = buf.toString('utf-8');
+      if (str.includes('Path:turn.end')) {
+        if (isFinished) return;
+        isFinished = true;
+        clearTimeout(timer);
+        try { ws.close(); } catch {}
+        const total = Buffer.concat(audioChunks);
+        if (!total.length) {
+          return rejectTTS(new Error('Received empty audio from Edge TTS'));
         }
+        resolveTTS(total);
       }
     });
 
@@ -165,7 +173,7 @@ function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pit
       if (audioChunks.length > 0) {
         resolveTTS(Buffer.concat(audioChunks));
       } else {
-        rejectTTS(new Error('Edge TTS WebSocket closed prematurely'));
+        rejectTTS(new Error('Edge TTS WebSocket closed without audio'));
       }
     });
   });

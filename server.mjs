@@ -109,7 +109,8 @@ function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pit
     }, 15000);
 
     ws.on('open', () => {
-      const configMsg = 'Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}';
+      const date = new Date().toISOString();
+      const configMsg = `X-Timestamp:${date}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`;
       ws.send(configMsg, (err) => {
         if (err) {
           clearTimeout(timer);
@@ -119,7 +120,7 @@ function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pit
         }
         const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="vi-VN"><voice name="${voice}"><prosody pitch="${pitch}" rate="${rate}">${escaped}</prosody></voice></speak>`;
-        const ssmlMsg = `X-RequestId:${reqId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`;
+        const ssmlMsg = `X-RequestId:${reqId}\r\nX-Timestamp:${date}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`;
         ws.send(ssmlMsg);
       });
     });
@@ -220,13 +221,22 @@ const server = createServer(async (req, res) => {
       else if (/HoaiMy|Hoài My|Female|Nữ/i.test(rawVoice)) voice = 'vi-VN-HoaiMyNeural';
       else if (rawVoice.includes('Neural')) voice = rawVoice;
 
-      // Convert rate to percentage string
-      const rateNum = Math.max(0.5, Math.min(2.0, parseFloat(rateParam) || 1.0));
-      const ratePercent = `${rateNum >= 1 ? '+' : ''}${Math.round((rateNum - 1) * 100)}%`;
+      // Robust Rate & Pitch Parsing (Supports "+0%", "1.0", "1.25", "+50Hz")
+      let ratePercent = '+0%';
+      if (typeof rateParam === 'string' && rateParam.includes('%')) {
+        ratePercent = rateParam;
+      } else {
+        const rateNum = Math.max(0.5, Math.min(2.5, parseFloat(rateParam) || 1.0));
+        ratePercent = `${rateNum >= 1 ? '+' : ''}${Math.round((rateNum - 1) * 100)}%`;
+      }
 
-      // Convert pitch to Hz
-      const pitchNum = Math.max(0.5, Math.min(1.5, parseFloat(pitchParam) || 1.0));
-      const pitchPercent = `${pitchNum >= 1 ? '+' : ''}${Math.round((pitchNum - 1) * 50)}Hz`;
+      let pitchPercent = '+0Hz';
+      if (typeof pitchParam === 'string' && pitchParam.includes('Hz')) {
+        pitchPercent = pitchParam;
+      } else {
+        const pitchNum = Math.max(0.5, Math.min(1.5, parseFloat(pitchParam) || 1.0));
+        pitchPercent = `${pitchNum >= 1 ? '+' : ''}${Math.round((pitchNum - 1) * 50)}Hz`;
+      }
 
       const cacheKey = getCacheKey(voice, text, ratePercent, pitchPercent);
 

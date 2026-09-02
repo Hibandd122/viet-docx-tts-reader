@@ -44,9 +44,13 @@
   // ==========================================================================
   let playbackGeneration = 0;
   let chapterGeneration = 0;
+  let preloadGeneration = 0;
   let foregroundAbortController = null;
   const preloadAbortControllers = new Map(); // key -> AbortController
   const managedObjectUrls = new Map();       // url -> { blob, key, createdAt, tag }
+  let pendingChapterAdvanceTimer = null;
+  const modalReturnFocus = new Map();
+  let sidebarReturnFocus = null;
 
   function getParagraphKey(volId, chapIdx, pIdx, voice, rate, pitch) {
     const rStr = `${rate >= 1 ? '+' : ''}${Math.round((rate - 1) * 100)}%`;
@@ -84,6 +88,11 @@
 
   function nextPlaybackGeneration() {
     playbackGeneration++;
+
+    if (pendingChapterAdvanceTimer !== null) {
+      clearTimeout(pendingChapterAdvanceTimer);
+      pendingChapterAdvanceTimer = null;
+    }
     
     // Abort active foreground fetch if running
     if (foregroundAbortController) {
@@ -101,6 +110,7 @@
       if (state.activeAudioUrl) {
         revokeManagedObjectUrl(state.activeAudioUrl);
         state.activeAudioUrl = null;
+        state.activeAudioKey = null;
       }
       try {
         state.masterAudio.removeAttribute('src');
@@ -120,18 +130,20 @@
     chapterGeneration++;
     nextPlaybackGeneration();
 
-    // Abort all in-flight preloads
+    resetPreloads('chapter_changed');
+    return chapterGeneration;
+  }
+
+  function resetPreloads(reason = 'preload_reset') {
+    preloadGeneration++;
+    // Abort all in-flight preloads and release their in-memory URLs.
     for (const [key, ctrl] of preloadAbortControllers.entries()) {
-      try { ctrl.abort('chapter_changed'); } catch {}
+      try { ctrl.abort(reason); } catch {}
     }
     preloadAbortControllers.clear();
-
-    // Revoke all preload object URLs from memory
     revokeAllManagedObjectUrls('preload');
     state.preloadedUrls = {};
     state.audioPreloadPromises = {};
-
-    return chapterGeneration;
   }
 
   // ==========================================================================
@@ -182,6 +194,7 @@
           }
         };
         req.onerror = () => resolve(null);
+        tx.onerror = () => resolve(null);
       });
     } catch {
       return null;
@@ -195,7 +208,7 @@
       if (!db) return;
 
       // LRU Eviction check
-      await evictCacheIfNeeded(db, blob.size);
+      await evictCacheIfNeeded(db, blob.size, state.activeAudioKey === key ? key : state.activeAudioKey);
 
       const tx = db.transaction(DB_STORE, 'readwrite');
       const store = tx.objectStore(DB_STORE);
@@ -216,28 +229,43 @@
     }
   }
 
-  async function evictCacheIfNeeded(db, incomingBytes) {
+  async function evictCacheIfNeeded(db, incomingBytes, protectedKey = null) {
     try {
-      const tx = db.transaction(DB_STORE, 'readwrite');
-      const store = tx.objectStore(DB_STORE);
-      const req = store.getAll();
-      
-      req.onsuccess = () => {
-        const items = req.result || [];
-        let totalSize = items.reduce((sum, item) => sum + (item.size || 0), 0);
-        
-        if (totalSize + incomingBytes > MAX_CACHE_BYTES) {
-          // Sort ascending by lastAccess (oldest accessed first)
-          items.sort((a, b) => (a.lastAccess || 0) - (b.lastAccess || 0));
-          
-          for (const oldItem of items) {
-            if (totalSize + incomingBytes <= MAX_CACHE_BYTES * 0.85) break;
-            store.delete(oldItem.key);
-            totalSize -= (oldItem.size || 0);
-          }
-        }
-      };
+      const items = await new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readonly');
+        const req = tx.objectStore(DB_STORE).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+        tx.onerror = () => reject(tx.error);
+      });
+      let totalSize = items.reduce((sum, item) => sum + (item.size || item.blob?.size || 0), 0);
+      if (totalSize + incomingBytes <= MAX_CACHE_BYTES) return;
+      const candidates = items.filter(item => item.key !== protectedKey)
+        .sort((a, b) => (a.lastAccess || 0) - (b.lastAccess || 0));
+      const toDelete = [];
+      for (const item of candidates) {
+        if (totalSize + incomingBytes <= MAX_CACHE_BYTES * 0.85) break;
+        toDelete.push(item.key);
+        totalSize -= (item.size || item.blob?.size || 0);
+      }
+      if (!toDelete.length) return;
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        const store = tx.objectStore(DB_STORE);
+        toDelete.forEach(key => store.delete(key));
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
     } catch {}
+  }
+
+  function takePreloadedUrl(key) {
+    const url = state.preloadedUrls[key];
+    if (!url) return null;
+    delete state.preloadedUrls[key];
+    const meta = managedObjectUrls.get(url);
+    if (meta) meta.tag = 'active';
+    return url;
   }
 
   async function clearIndexedDBCache() {
@@ -338,6 +366,7 @@
     isLoadingAudio: false,
     wakeLock: null,
     activeAudioUrl: null,
+    activeAudioKey: null,
 
     // Audio & TTS Engine
     engine: savedSettings.engine || 'edge',
@@ -645,7 +674,14 @@
     if (statsSkeleton) statsSkeleton.style.display = 'none';
     if (statsText) {
       statsText.style.display = 'inline';
-      statsText.textContent = `${(chapter.wordCount || 0).toLocaleString()} từ · ~${chapter.estMinutes || 1} phút đọc`;
+      const derivedWords = Array.isArray(chapter.blocks)
+        ? chapter.blocks.filter(block => block.type === 'p').reduce((sum, block) => sum + String(block.text || '').trim().split(/\s+/).filter(Boolean).length, 0)
+        : 0;
+      const wordCount = Number(chapter.wordCount) || derivedWords;
+      const minutes = Number(chapter.estMinutes) || (wordCount ? Math.max(1, Math.ceil(wordCount / 150)) : 0);
+      statsText.textContent = wordCount
+        ? `${wordCount.toLocaleString()} từ · ~${minutes} phút đọc`
+        : 'Đang cập nhật thông tin chương…';
     }
     
     const totalParas = chapter.blocks ? chapter.blocks.filter(b => b.type === 'p').length : 0;
@@ -768,11 +804,14 @@
     
     const pEls = $$('#content p');
     if (pIdx < 0 || pIdx >= pEls.length) {
-      if (pIdx >= pEls.length && state.autoNext && state.chapterIndex < currentChapters.length - 1) {
+      if (pIdx >= pEls.length && state.sleepTimer.mode !== 'chapter' && state.autoNext && state.chapterIndex < currentChapters.length - 1) {
         showToast('Đang chuyển sang chương kế tiếp…');
-        setTimeout(() => {
+        const advanceGeneration = playbackGeneration;
+        pendingChapterAdvanceTimer = setTimeout(() => {
+          pendingChapterAdvanceTimer = null;
+          if (advanceGeneration !== playbackGeneration) return;
           loadChapter(state.chapterIndex + 1);
-          playParagraph(0);
+          if (advanceGeneration + 1 === playbackGeneration) playParagraph(0);
         }, 600);
       } else {
         stopPlayback();
@@ -801,7 +840,7 @@
     saveReadingProgress(state.chapterIndex, pIdx);
     updatePlayerStatusUI();
     updatePlayPauseButtonUI(true, true);
-    requestScreenWakeLock();
+    requestScreenWakeLock(pGen);
     updateMediaSessionMetadata();
     setStatusState('PLAYING', `Đang đọc đoạn ${pIdx + 1}`);
     
@@ -830,11 +869,13 @@
     audio.volume = state.isMuted ? 0 : state.volume;
     
     const cacheKey = getParagraphKey(state.volumeId, state.chapterIndex, pIdx, state.voice, state.rate, state.pitch);
+    state.activeAudioKey = cacheKey;
 
     // 1. Check in-memory preloaded URL (Keyed by full identity)
     if (state.preloadedUrls[cacheKey]) {
       if (pGen !== playbackGeneration || cGen !== chapterGeneration) return;
-      const url = state.preloadedUrls[cacheKey];
+      const url = takePreloadedUrl(cacheKey);
+      if (!url) return;
       state.activeAudioUrl = url;
       audio.src = url;
       attachAudioEvents(audio, pIdx, pGen, cGen);
@@ -964,6 +1005,16 @@
       console.warn('WebSpeech utterance error:', err);
       playParagraph(pIdx + 1);
     };
+    utter.onpause = () => {
+      if (pGen !== playbackGeneration || cGen !== chapterGeneration) return;
+      state.isPaused = true;
+      updatePlayPauseButtonUI(false, false);
+    };
+    utter.onresume = () => {
+      if (pGen !== playbackGeneration || cGen !== chapterGeneration) return;
+      state.isPaused = false;
+      updatePlayPauseButtonUI(true, false);
+    };
     
     window.speechSynthesis.speak(utter);
   }
@@ -972,6 +1023,7 @@
   // 11. HARDENED PRELOAD PIPELINE (ISOLATED BY FULL KEY & CHAPTER GEN)
   // ==========================================================================
   function preloadNextParagraphs(currentIdx, count = 5, cGen = chapterGeneration) {
+    const preloadGen = preloadGeneration;
     const pEls = $$('#content p');
     for (let i = 1; i <= count; i++) {
       const targetIdx = currentIdx + i;
@@ -986,6 +1038,8 @@
       const text = p.textContent.replace(/🔖/g, '').trim();
       if (!text) continue;
 
+      const preloadVolumeId = state.volumeId;
+      const preloadChapterIndex = state.chapterIndex;
       const ctrl = new AbortController();
       preloadAbortControllers.set(cacheKey, ctrl);
 
@@ -1000,11 +1054,11 @@
         })
         .then(blob => {
           preloadAbortControllers.delete(cacheKey);
-          if (cGen !== chapterGeneration) {
+          if (cGen !== chapterGeneration || preloadGen !== preloadGeneration) {
             // Chapter changed while downloading; do not assign to state
             return;
           }
-          setCachedAudio(cacheKey, blob, state.volumeId, state.chapterIndex, targetIdx);
+          setCachedAudio(cacheKey, blob, preloadVolumeId, preloadChapterIndex, targetIdx);
           const managedUrl = createManagedObjectUrl(blob, cacheKey, 'preload');
           if (managedUrl) {
             state.preloadedUrls[cacheKey] = managedUrl;
@@ -1064,6 +1118,11 @@
     if (playSvg) playSvg.hidden = isPlaying || isLoading;
     if (pauseSvg) pauseSvg.hidden = !isPlaying || isLoading;
     if (pulseDot) pulseDot.classList.toggle('playing', isPlaying);
+    const playButton = $('playerPlayPauseBtn');
+    if (playButton) {
+      playButton.setAttribute('aria-pressed', String(Boolean(isPlaying && !isLoading)));
+      playButton.setAttribute('aria-label', isLoading ? 'Đang tải giọng đọc' : (isPlaying ? 'Tạm dừng' : 'Phát'));
+    }
   }
 
   function updatePlayerStatusUI() {
@@ -1076,7 +1135,7 @@
     if (chLabel) chLabel.textContent = `Chương ${state.chapterIndex + 1}`;
     
     const posBadge = $('playerSegmentPos');
-    if (posBadge) posBadge.textContent = `Đoạn ${curP}/${totalParas}`;
+    if (posBadge) posBadge.textContent = totalParas ? `Đoạn ${curP || '—'}/${totalParas}` : 'Đang tải…';
     
     const snippetEl = $('nowReadingSnippet');
     if (snippetEl) {
@@ -1153,8 +1212,8 @@
   function initMediaSessionActionHandlers() {
     if (!('mediaSession' in navigator)) return;
     const actions = [
-      ['play', () => togglePlayPause()],
-      ['pause', () => togglePlayPause()],
+      ['play', () => { if (!state.isPlaying || state.isPaused) togglePlayPause(); }],
+      ['pause', () => { if (state.isPlaying && !state.isPaused) togglePlayPause(); }],
       ['previoustrack', () => playParagraph(Math.max(0, state.paragraphIndex - 1))],
       ['nexttrack', () => playParagraph(state.paragraphIndex + 1)],
       ['seekbackward', () => {
@@ -1170,10 +1229,15 @@
     });
   }
 
-  async function requestScreenWakeLock() {
+  async function requestScreenWakeLock(generation = playbackGeneration) {
     if ('wakeLock' in navigator) {
       try {
-        state.wakeLock = await navigator.wakeLock.request('screen');
+        const lock = await navigator.wakeLock.request('screen');
+        if (generation !== playbackGeneration || !state.isPlaying || state.isPaused) {
+          try { await lock.release(); } catch {}
+          return;
+        }
+        state.wakeLock = lock;
       } catch {}
     }
   }
@@ -1512,14 +1576,19 @@
     if (!modal || !img) return;
     img.src = src;
     if (cap) cap.textContent = caption;
+    if (!modalReturnFocus.has('lightboxModal')) modalReturnFocus.set('lightboxModal', document.activeElement);
     lockBodyScroll();
     modal.removeAttribute('hidden');
+    requestAnimationFrame(() => $('lightboxCloseBtn')?.focus());
   }
 
   function closeLightbox() {
     const modal = $('lightboxModal');
     if (modal) modal.setAttribute('hidden', '');
     unlockBodyScroll();
+    const trigger = modalReturnFocus.get('lightboxModal');
+    modalReturnFocus.delete('lightboxModal');
+    if (trigger && typeof trigger.focus === 'function') trigger.focus();
   }
 
   function openColorGallery() {
@@ -1583,8 +1652,13 @@
   function openModal(modalId) {
     const modal = $(modalId);
     if (modal) {
+      if (!modalReturnFocus.has(modalId)) modalReturnFocus.set(modalId, document.activeElement);
       modal.removeAttribute('hidden');
       lockBodyScroll();
+      requestAnimationFrame(() => {
+        const first = modal.querySelector('button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])');
+        first?.focus();
+      });
     }
   }
 
@@ -1593,7 +1667,42 @@
     if (modal) {
       modal.setAttribute('hidden', '');
       unlockBodyScroll();
+      const trigger = modalReturnFocus.get(modalId);
+      modalReturnFocus.delete(modalId);
+      if (trigger && typeof trigger.focus === 'function') trigger.focus();
     }
+  }
+
+  function trapModalKeyboard(event) {
+    const modal = Array.from(document.querySelectorAll('.modal-dialog-wrap:not([hidden])'))[0];
+    const sidebar = window.innerWidth <= 900 ? document.querySelector('#sidebar.open') : null;
+    if (!modal && !sidebar) return false;
+    if (!modal && sidebar && event.key === 'Escape') {
+      event.preventDefault();
+      closeSidebar();
+      return true;
+    }
+    const container = modal || sidebar;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      if (modal) closeModal(modal.id);
+      else closeSidebar();
+      return true;
+    }
+    if (event.key !== 'Tab') return false;
+    const focusable = Array.from(container.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'))
+      .filter(el => el.offsetParent !== null);
+    if (!focusable.length) return true;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+    return true;
   }
 
   function showConfirmDialog(title, message, onConfirm) {
@@ -1633,7 +1742,11 @@
     if (window.innerWidth <= 900) {
       const isOpen = sidebar.classList.toggle('open');
       if (backdrop) backdrop.hidden = !isOpen;
-      if (isOpen) lockBodyScroll();
+      if (isOpen) {
+        sidebarReturnFocus = document.activeElement;
+        lockBodyScroll();
+        requestAnimationFrame(() => $('sidebarCloseBtn')?.focus());
+      }
       else unlockBodyScroll();
     } else {
       state.isSidebarOpen = !state.isSidebarOpen;
@@ -1647,6 +1760,8 @@
     if (sidebar) sidebar.classList.remove('open');
     if (backdrop) backdrop.hidden = true;
     unlockBodyScroll();
+    if (sidebarReturnFocus && typeof sidebarReturnFocus.focus === 'function') sidebarReturnFocus.focus();
+    sidebarReturnFocus = null;
   }
 
   function toggleZenMode() {
@@ -2001,6 +2116,8 @@
     });
 
     $('voiceSelect')?.addEventListener('change', (e) => {
+      const resume = state.isPlaying && !state.isPaused;
+      const resumeParagraph = state.paragraphIndex;
       const selectedVal = e.target.value;
       state.voice = selectedVal;
       
@@ -2012,6 +2129,11 @@
       }
       
       saveSettings({ voice: state.voice, engine: state.engine });
+      resetPreloads('voice_changed');
+      if (resume) {
+        nextPlaybackGeneration();
+        playParagraph(Math.max(0, resumeParagraph));
+      }
       updatePlayerStatusUI();
       showToast(`Đã chọn: ${e.target.options[e.target.selectedIndex]?.text || state.voice}`);
     });
@@ -2020,6 +2142,8 @@
     const applyCustomVoiceBtn = $('applyCustomVoiceBtn');
     if (customVoiceInput && applyCustomVoiceBtn) {
       applyCustomVoiceBtn.onclick = () => {
+        const resume = state.isPlaying && !state.isPaused;
+        const resumeParagraph = state.paragraphIndex;
         const val = customVoiceInput.value.trim();
         if (!val) {
           showToast('Vui lòng nhập tên giọng đọc');
@@ -2030,6 +2154,11 @@
           state.engine = 'edge';
         }
         saveSettings({ voice: state.voice, engine: state.engine });
+        resetPreloads('voice_changed');
+        if (resume) {
+          nextPlaybackGeneration();
+          playParagraph(Math.max(0, resumeParagraph));
+        }
 
         const select = $('voiceSelect');
         if (select) {
@@ -2050,11 +2179,15 @@
 
     $$('input[name="ttsEngine"]').forEach(radio => {
       radio.onchange = (e) => {
+        const resume = state.isPlaying && !state.isPaused;
+        const resumeParagraph = state.paragraphIndex;
         state.engine = e.target.value;
         saveSettings({ engine: state.engine });
+        resetPreloads('engine_changed');
         nextPlaybackGeneration();
         setStatusState('READY');
         updatePlayerStatusUI();
+        if (resume) playParagraph(Math.max(0, resumeParagraph));
       };
     });
 
@@ -2090,7 +2223,13 @@
     });
 
     $('clearCacheBtn')?.addEventListener('click', async () => {
-      revokeAllManagedObjectUrls();
+      stopPlayback();
+      for (const controller of preloadAbortControllers.values()) {
+        try { controller.abort('cache_cleared'); } catch {}
+      }
+      preloadAbortControllers.clear();
+      revokeAllManagedObjectUrls('preload');
+      revokeAllManagedObjectUrls('export');
       state.preloadedUrls = {};
       state.audioPreloadPromises = {};
       await clearIndexedDBCache();
@@ -2187,8 +2326,9 @@
     });
 
     window.addEventListener('keydown', (e) => {
+      if (trapModalKeyboard(e)) return;
       const tag = document.activeElement?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || document.activeElement?.isContentEditable) {
         if (e.key === 'Escape') document.activeElement.blur();
         return;
       }

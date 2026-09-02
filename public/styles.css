@@ -2140,3 +2140,238 @@ body.zen-mode .reader-area { padding-top: 36px; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ===========================================================================
+   11. UI POLISH PASS · QUIET LUXURY READER
+   =========================================================================== */
+:root {
+  --surface-glass: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+  --hairline: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --accent-gradient: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+}
+
+body {
+  background-image:
+    radial-gradient(ellipse at 50% -12%, var(--accent-soft), transparent 46%),
+    linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--bg-primary) 92%, var(--accent-secondary)) 100%);
+  background-attachment: fixed;
+}
+
+.topbar {
+  background: color-mix(in srgb, var(--bg-primary) 74%, transparent);
+  border-bottom-color: var(--hairline);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.025), 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+.topbar-btn, .icon-btn {
+  border: 1px solid transparent;
+}
+
+.topbar-btn:hover, .icon-btn:hover {
+  border-color: var(--hairline);
+  transform: translateY(-1px);
+}
+
+.engine-badge {
+  background: color-mix(in srgb, var(--bg-surface) 76%, transparent);
+  border-color: var(--hairline);
+}
+
+.quick-chapter-bar {
+  background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
+  border-color: var(--hairline);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.chapter-hero {
+  position: relative;
+  padding: 28px 28px 22px;
+  border: 1px solid var(--hairline);
+  border-radius: calc(var(--radius-panel) + 4px);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 72%, transparent), transparent 58%),
+    color-mix(in srgb, var(--bg-surface) 76%, transparent);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.10);
+  overflow: hidden;
+}
+
+.chapter-hero::after {
+  content: '';
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  right: -90px;
+  top: -105px;
+  border-radius: 50%;
+  background: var(--accent-glow);
+  filter: blur(18px);
+  pointer-events: none;
+}
+
+.chapter-heading {
+  max-width: 760px;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.chapter-progress-track {
+  height: 4px;
+  margin: -3px 18px 0;
+  position: relative;
+  z-index: 1;
+  background: color-mix(in srgb, var(--bg-surface-active) 72%, transparent);
+}
+
+.chapter-progress-fill, .global-progress-fill {
+  background: var(--accent-gradient);
+}
+
+.book-content p {
+  border: 1px solid transparent;
+  padding: 10px 16px;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.book-content p:hover {
+  background: color-mix(in srgb, var(--bg-surface) 42%, transparent);
+  border-color: var(--hairline);
+}
+
+.book-content p.reading-active {
+  border-color: color-mix(in srgb, var(--reading-border) 38%, transparent);
+  border-left: 3px solid var(--reading-border);
+  background: linear-gradient(90deg, var(--reading-highlight), transparent 78%);
+  box-shadow: 0 8px 26px color-mix(in srgb, var(--accent-glow) 55%, transparent);
+}
+
+.nav-card, .volume-info-card, .overall-progress-card, .bookmark-card {
+  border-color: var(--hairline);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.audio-player {
+  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  border-top-color: color-mix(in srgb, var(--accent-primary) 24%, var(--hairline));
+  box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.22);
+}
+
+.player-pos-badge {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 16%, transparent);
+}
+
+.ctrl-btn {
+  border-color: var(--hairline);
+  background: color-mix(in srgb, var(--bg-surface) 84%, transparent);
+}
+
+.play-main-btn {
+  background: var(--accent-gradient);
+  box-shadow: 0 5px 20px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.24);
+}
+
+.play-main-btn:focus-visible {
+  outline-offset: 4px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-primary) 25%, transparent), 0 5px 20px var(--accent-glow);
+}
+
+.modal-card {
+  border-color: color-mix(in srgb, var(--accent-primary) 18%, var(--border-medium));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    min-height: calc(var(--topbar-height) + env(safe-area-inset-top, 0px));
+  }
+
+  .reader-container {
+    gap: 16px;
+  }
+
+  .chapter-hero {
+    padding: 22px 18px 18px;
+  }
+
+  .chapter-heading {
+    font-size: clamp(21px, 5.8vw, 26px);
+  }
+
+  .book-content p {
+    padding: 9px 10px;
+  }
+
+  .audio-player {
+    background: color-mix(in srgb, var(--bg-secondary) 90%, transparent);
+  }
+}
+
+@media (max-width: 390px) {
+  .topbar-actions > .volume-dropdown-wrap,
+  .topbar-actions > #zenModeBtn,
+  .topbar-actions > .theme-dropdown-wrap {
+    display: none;
+  }
+
+  .topbar {
+    padding-left: max(8px, env(safe-area-inset-left, 0px));
+    padding-right: max(8px, env(safe-area-inset-right, 0px));
+  }
+
+  .topbar-brand {
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .brand-title {
+    max-width: 112px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .topbar-actions {
+    gap: 1px;
+  }
+
+  .topbar-btn, .icon-btn {
+    width: 40px;
+    padding: 0;
+  }
+
+  .chapter-subnav {
+    margin-top: 2px;
+  }
+
+  .btn-nav {
+    padding: 0 10px;
+  }
+
+  .quick-bar-label {
+    display: none;
+  }
+}
+
+@media (max-width: 360px) {
+  .topbar-btn, .icon-btn {
+    width: 38px;
+  }
+
+  .brand-title {
+    max-width: 92px;
+  }
+
+  .chapter-hero {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .chapter-pos-indicator {
+    gap: 3px;
+  }
+
+  .chapter-progress-badge {
+    padding-left: 7px;
+    padding-right: 7px;
+  }
+}

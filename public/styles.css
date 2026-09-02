@@ -2603,6 +2603,7 @@ body {
 @media (min-width: 901px) {
   .audio-player {
     left: 50%;
+    transform: translateX(-50%);
     width: min(calc(100% - 32px), 1320px);
     border: 1px solid color-mix(in srgb, var(--accent-primary) 20%, var(--player-border));
     border-bottom: 0;

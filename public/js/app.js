@@ -260,15 +260,19 @@
         const items = req.result || [];
         const count = items.length;
         const totalBytes = items.reduce((sum, item) => sum + (item.size || 0), 0);
+        const countStr = count.toLocaleString();
+        const mb = totalBytes / (1024 * 1024);
+        const sizeStr = mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.round(totalBytes / 1024)} KB`;
         
         const countEl = $('cacheCountLabel');
-        if (countEl) countEl.textContent = count.toLocaleString();
-        
+        if (countEl) countEl.textContent = countStr;
         const sizeEl = $('cacheSizeLabel');
-        if (sizeEl) {
-          const mb = totalBytes / (1024 * 1024);
-          sizeEl.textContent = mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.round(totalBytes / 1024)} KB`;
-        }
+        if (sizeEl) sizeEl.textContent = sizeStr;
+
+        const basicCountEl = $('basicCacheCountLabel');
+        if (basicCountEl) basicCountEl.textContent = countStr;
+        const basicSizeEl = $('basicCacheSizeLabel');
+        if (basicSizeEl) basicSizeEl.textContent = sizeStr;
       };
     } catch {}
   }

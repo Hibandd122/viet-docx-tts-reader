@@ -320,6 +320,14 @@
               <span class="toggle-track"></span>
               <span class="toggle-label">Tự động chuyển chương khi đọc hết</span>
             </label>
+            <div class="toggle-with-hint">
+              <label class="toggle-control mobile-touch-target">
+                <input type="checkbox" id="autoPreloadNextCheck" checked>
+                <span class="toggle-track"></span>
+                <span class="toggle-label">Tự động tải trước & lưu 5 đoạn tiếp theo (Cache TTS)</span>
+              </label>
+              <small class="field-hint" style="margin-left: 54px; margin-top: -4px; display: block;">Đã đệm sẵn: <strong id="basicCacheCountLabel">0</strong> đoạn (<span id="basicCacheSizeLabel">0 KB</span>)</small>
+            </div>
           </div>
         </section>
 
@@ -442,11 +450,6 @@
                   <span id="cacheSizeLabel" class="cache-stat-badge">0 KB</span>
                 </div>
               </div>
-              <label class="toggle-control mt-2 mobile-touch-target">
-                <input type="checkbox" id="autoPreloadNextCheck" checked>
-                <span class="toggle-track"></span>
-                <span class="toggle-label">Tự động tải trước 5 đoạn tiếp theo</span>
-              </label>
               <button id="clearCacheBtn" class="btn btn-secondary w-full mt-2 mobile-touch-target" type="button">
                 🗑️ Dọn dẹp bộ nhớ đệm
               </button>

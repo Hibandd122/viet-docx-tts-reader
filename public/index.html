@@ -574,13 +574,13 @@
         
         <!-- Live Quick Badges: Speed · Voice · Timer · Engine (Tap speed or timer to open quick sheet) -->
         <div class="player-quick-badges" id="playerQuickBadges">
-          <button id="playerSpeedBadgeBtn" class="p-badge-btn mobile-touch-target" title="Chạm để đổi tốc độ">
+          <button id="playerSpeedBadgeBtn" class="p-badge-btn mobile-touch-target" title="Chạm để đổi tốc độ" aria-label="Đổi tốc độ đọc">
             <span id="playerSpeedBadge" class="p-badge">1.0×</span>
           </button>
           <span class="p-badge-sep">·</span>
           <span id="playerVoiceBadge" class="p-badge">Hoài My</span>
           <span class="p-badge-sep">·</span>
-          <button id="playerTimerBadgeBtn" class="p-badge-btn mobile-touch-target" title="Chạm để hẹn giờ tắt">
+          <button id="playerTimerBadgeBtn" class="p-badge-btn mobile-touch-target" title="Chạm để hẹn giờ tắt" aria-label="Hẹn giờ tắt">
             <span id="playerTimerBadge" class="p-badge">🌙 Tắt</span>
           </button>
           <span class="p-badge-sep">·</span>
@@ -606,7 +606,7 @@
           </button>
 
           <!-- Main Play / Pause Button (The most prominent centerpiece) -->
-          <button id="playerPlayPauseBtn" class="ctrl-btn play-main-btn mobile-touch-target" aria-label="Phát hoặc Tạm dừng" title="Phát / Tạm dừng (Space)">
+          <button id="playerPlayPauseBtn" class="ctrl-btn play-main-btn mobile-touch-target" aria-label="Phát" aria-pressed="false" title="Phát / Tạm dừng (Space)">
             <svg id="playIconSvg" width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
             <svg id="pauseIconSvg" width="26" height="26" viewBox="0 0 24 24" fill="currentColor" hidden><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>
             <div id="playerLoadingSpinner" class="spinner-small" hidden></div>

@@ -2375,3 +2375,119 @@ body {
     padding-right: 7px;
   }
 }
+
+/* Final compactness pass */
+@media (min-width: 901px) {
+  .sidebar {
+    width: 318px;
+  }
+
+  .reader-area {
+    padding-top: 20px;
+  }
+
+  .reader-container {
+    gap: 14px;
+  }
+}
+
+.settings-group {
+  gap: 12px;
+}
+
+.settings-header {
+  padding-bottom: 2px;
+}
+
+.settings-accordion {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+}
+
+.accordion-summary {
+  min-height: 48px;
+  padding: 11px 14px;
+}
+
+.accordion-content {
+  padding: 14px;
+  gap: 12px;
+}
+
+.chapter-nav-footer {
+  margin-top: 20px;
+  padding-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .tab-pane {
+    padding: 12px 12px calc(96px + env(safe-area-inset-bottom, 0px));
+    gap: 12px;
+  }
+
+  .volume-info-card,
+  .overall-progress-card {
+    padding: 10px;
+  }
+
+  .audio-player {
+    padding: 6px 10px max(6px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .player-inner {
+    gap: 4px;
+  }
+
+  .player-left {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 8px;
+  }
+
+  .player-heading-row {
+    min-width: 0;
+  }
+
+  .player-quick-badges {
+    grid-column: 1 / -1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .player-center {
+    gap: 2px;
+  }
+
+  .controls-row {
+    gap: 4px;
+  }
+
+  .reader-area {
+    padding-bottom: calc(var(--player-height, 96px) + 18px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 390px) {
+  .player-quick-badges {
+    font-size: 10.5px;
+  }
+
+  .p-badge-btn {
+    min-height: 30px;
+  }
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .audio-player {
+    padding: 4px 14px max(4px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .player-left {
+    display: flex;
+    gap: 2px;
+  }
+
+  .player-quick-badges {
+    grid-column: auto;
+  }
+}

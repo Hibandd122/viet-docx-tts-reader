@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const TRUSTED_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
 const audioCache = new Map();
 const pendingAudioCache = new Map();
-const MAX_CACHE_ITEMS = 150;
+const MAX_CACHE_ITEMS = 200;
 
 function sanitizeEdgeVoice(rawVoice) {
   const voiceText = String(rawVoice || '');
@@ -15,11 +15,17 @@ function sanitizeEdgeVoice(rawVoice) {
 }
 
 function normalizeRate(rateParam) {
-  const rateNum = Math.max(0.5, Math.min(2.0, parseFloat(rateParam) || 1.0));
+  if (typeof rateParam === 'string' && rateParam.includes('%')) {
+    return rateParam;
+  }
+  const rateNum = Math.max(0.5, Math.min(2.5, parseFloat(rateParam) || 1.0));
   return `${rateNum >= 1 ? '+' : ''}${Math.round((rateNum - 1) * 100)}%`;
 }
 
 function normalizePitch(pitchParam) {
+  if (typeof pitchParam === 'string' && pitchParam.includes('Hz')) {
+    return pitchParam;
+  }
   const pitchNum = Math.max(0.5, Math.min(1.5, parseFloat(pitchParam) || 1.0));
   return `${pitchNum >= 1 ? '+' : ''}${Math.round((pitchNum - 1) * 50)}Hz`;
 }
@@ -56,11 +62,12 @@ function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pit
       if (isFinished) return;
       isFinished = true;
       try { ws.close(); } catch {}
-      reject(new Error('Edge TTS WebSocket timeout after 15s'));
-    }, 15000);
+      reject(new Error('Edge TTS WebSocket timeout after 12s'));
+    }, 12000);
 
     ws.on('open', () => {
-      const configMsg = 'Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}';
+      const date = new Date().toISOString();
+      const configMsg = `X-Timestamp:${date}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`;
       ws.send(configMsg, (err) => {
         if (err) {
           clearTimeout(timer);
@@ -70,7 +77,7 @@ function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pit
         }
         const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="vi-VN"><voice name="${voice}"><prosody pitch="${pitch}" rate="${rate}">${escaped}</prosody></voice></speak>`;
-        const ssmlMsg = `X-RequestId:${reqId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`;
+        const ssmlMsg = `X-RequestId:${reqId}\r\nX-Timestamp:${date}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`;
         ws.send(ssmlMsg);
       });
     });
@@ -152,7 +159,7 @@ module.exports = async (req, res) => {
       res.setHeader('Content-Type', 'audio/mpeg');
       res.setHeader('Content-Length', cachedBuffer.length);
       res.setHeader('X-Cache', 'HIT');
-      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
       return res.status(200).send(cachedBuffer);
     }
 
@@ -163,8 +170,8 @@ module.exports = async (req, res) => {
       );
     }
 
-    const audioBuffer = await pendingAudioCache.get(cacheKey);
-    if (!audioBuffer || !audioBuffer.length) {
+    const fullBuffer = await pendingAudioCache.get(cacheKey);
+    if (!fullBuffer || !fullBuffer.length) {
       return res.status(502).send('TTS returned empty audio');
     }
 
@@ -172,15 +179,15 @@ module.exports = async (req, res) => {
       const firstKey = audioCache.keys().next().value;
       audioCache.delete(firstKey);
     }
-    audioCache.set(cacheKey, audioBuffer);
+    audioCache.set(cacheKey, fullBuffer);
 
     res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Content-Length', audioBuffer.length);
+    res.setHeader('Content-Length', fullBuffer.length);
     res.setHeader('X-Cache', 'MISS');
-    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800');
-    return res.status(200).send(audioBuffer);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.status(200).send(fullBuffer);
   } catch (err) {
-    console.error('Vercel TTS error:', err);
-    return res.status(500).send('TTS error: ' + (err.message || String(err)));
+    console.error('Serverless TTS Error:', err);
+    return res.status(500).send(`TTS Error: ${err.message}`);
   }
 };

@@ -17,7 +17,10 @@
   const STORAGE_SETTINGS = 'vol9_pro_settings';
   const STORAGE_PROGRESS = 'vol9_pro_progress';
   const STORAGE_BOOKMARKS = 'vol9_pro_bookmarks';
-  const APP_BUILD = 'ux-pro-v1';
+  const DB_NAME = 'WebReaderProAudioDB';
+  const DB_STORE = 'audio_chunks';
+  const DB_VERSION = 1;
+  const APP_BUILD = 'ux-pro-v2';
 
   // Environment detection
   const isExtension = typeof chrome !== 'undefined' && Boolean(chrome.runtime?.id);
@@ -34,6 +37,79 @@
   const savedBookmarks = (() => {
     try { return JSON.parse(localStorage.getItem(STORAGE_BOOKMARKS) || '[]'); } catch { return []; }
   })();
+
+  // IndexedDB Manager for Audio Cache
+  let dbPromise = null;
+  function getDB() {
+    if (!dbPromise) {
+      dbPromise = new Promise((resolve) => {
+        if (!('indexedDB' in window)) return resolve(null);
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(DB_STORE)) {
+            db.createObjectStore(DB_STORE, { keyPath: 'key' });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      });
+    }
+    return dbPromise;
+  }
+
+  async function getCachedAudio(key) {
+    try {
+      const db = await getDB();
+      if (!db) return null;
+      return new Promise((resolve) => {
+        const tx = db.transaction(DB_STORE, 'readonly');
+        const store = tx.objectStore(DB_STORE);
+        const req = store.get(key);
+        req.onsuccess = () => resolve(req.result?.blob || null);
+        req.onerror = () => resolve(null);
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  async function setCachedAudio(key, blob) {
+    try {
+      const db = await getDB();
+      if (!db) return;
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      const store = tx.objectStore(DB_STORE);
+      store.put({ key, blob, time: Date.now() });
+      updateCacheStatsUI();
+    } catch {}
+  }
+
+  async function clearIndexedDBCache() {
+    try {
+      const db = await getDB();
+      if (!db) return;
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).clear();
+    } catch {}
+  }
+
+  async function updateCacheStatsUI() {
+    try {
+      const db = await getDB();
+      if (!db) return;
+      const tx = db.transaction(DB_STORE, 'readonly');
+      const store = tx.objectStore(DB_STORE);
+      const countReq = store.count();
+      countReq.onsuccess = () => {
+        const count = countReq.result || 0;
+        const countEl = $('cacheCountLabel');
+        if (countEl) countEl.textContent = count.toLocaleString();
+        const sizeEl = $('cacheSizeLabel');
+        if (sizeEl) sizeEl.textContent = `~${(count * 22).toLocaleString()} KB`;
+      };
+    } catch {}
+  }
 
   // Multi-Volume Support
   function getActiveVolumeId() {
@@ -159,7 +235,6 @@
     if (typeof chapIdx !== 'number' || chapIdx < 0 || typeof paraIdx !== 'number' || paraIdx < 0) return;
     state.progressMap[chapIdx] = paraIdx;
     
-    // Debounce localStorage writes to prevent frame drops
     clearTimeout(state.saveProgressTimer);
     state.saveProgressTimer = setTimeout(() => {
       const toSave = {
@@ -256,7 +331,6 @@
       swatch.style.background = colors[themeName] || '#818cf8';
     }
 
-    // Sync settings swatches active class
     $$('#settingsThemeSwatches .swatch-card').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.theme === themeName);
     });
@@ -291,7 +365,6 @@
     state.chapterIndex = 0;
     state.paragraphIndex = -1;
     
-    // Update labels
     const volBadge = $('appVolumeBadge');
     if (volBadge) volBadge.textContent = volData.id.toUpperCase();
     
@@ -311,12 +384,10 @@
     const cardCover = $('volCardCover');
     if (cardCover && volData.cover) cardCover.src = volData.cover;
     
-    // Update volume picker menu active classes
     $$('.volume-opt').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.volume === volId);
     });
     
-    // Save progress volume change
     saveReadingProgress(0, 0);
     
     renderChapterList();
@@ -343,14 +414,12 @@
     const chapter = currentChapters[index];
     setStatusState('LOADING_BOOK', 'Đang nạp chương…');
     
-    // Header Hero Updates
     const numLabel = $('chapterNumberLabel');
     if (numLabel) numLabel.textContent = `PHẦN ${(index + 1).toString().padStart(2, '0')}`;
     
     const titleEl = $('chapterTitle');
     if (titleEl) titleEl.textContent = chapter.title || `Chương ${index + 1}`;
     
-    // Chapter word count & time
     const statsSkeleton = $('chapterStatsSkeleton');
     const statsText = $('chapterStatsRealText');
     if (statsSkeleton) statsSkeleton.style.display = 'none';
@@ -359,12 +428,10 @@
       statsText.textContent = `${(chapter.wordCount || 0).toLocaleString()} từ · ~${chapter.estMinutes || 1} phút đọc`;
     }
     
-    // Progress badges
     const totalParas = chapter.blocks ? chapter.blocks.filter(b => b.type === 'p').length : 0;
     const progressEl = $('chapterParagraphProgress');
     if (progressEl) progressEl.textContent = `${totalParas} đoạn`;
     
-    // Nav buttons status
     const prevTop = $('prevChapterBtnTop');
     const nextTop = $('nextChapterBtnTop');
     if (prevTop) prevTop.disabled = index === 0;
@@ -384,7 +451,6 @@
       if (nextTitle) nextTitle.textContent = index < currentChapters.length - 1 ? currentChapters[index + 1].title : 'Không có';
     }
     
-    // Render Content Article
     const contentEl = $('content');
     if (!contentEl) return;
     contentEl.innerHTML = '';
@@ -398,7 +464,6 @@
         if (pIdx === 0) p.classList.add('first-paragraph');
         if (block.align === 'center') p.classList.add('text-center');
         
-        // Render runs with bold/italic fidelity
         if (Array.isArray(block.runs) && block.runs.length > 0) {
           block.runs.forEach(r => {
             const span = document.createElement('span');
@@ -411,7 +476,6 @@
           p.textContent = block.text;
         }
         
-        // Bookmark button on paragraph hover
         const bBtn = document.createElement('button');
         bBtn.className = 'para-bookmark-btn';
         bBtn.innerHTML = '🔖';
@@ -422,14 +486,12 @@
           toggleBookmark(state.volumeId, state.chapterIndex, p.dataset.index, p.textContent);
         };
         
-        // Check if already bookmarked
         if (isParagraphBookmarked(state.volumeId, state.chapterIndex, pIdx)) {
           bBtn.classList.add('bookmarked');
         }
         
         p.appendChild(bBtn);
         
-        // Click paragraph to play immediately
         p.onclick = () => {
           playParagraph(Number(p.dataset.index));
         };
@@ -454,11 +516,9 @@
       }
     });
     
-    // Update Chapter List selection
     highlightActiveChapterInTOC(index);
     updateQuickChapterActive(index);
     
-    // Restore or reset reading position
     const savedPara = state.progressMap[index] ?? 0;
     state.paragraphIndex = savedPara;
     updatePlayerStatusUI();
@@ -482,7 +542,7 @@
   // ==========================================================================
   // 6. REDESIGNED TTS PLAYBACK CONTROLLER
   // ==========================================================================
-  function playParagraph(pIdx) {
+  async function playParagraph(pIdx) {
     const volData = getActiveVolumeData();
     const currentChapters = volData.chapters || [];
     const chapter = currentChapters[state.chapterIndex];
@@ -490,7 +550,6 @@
     
     const pEls = $$('#content p');
     if (pIdx < 0 || pIdx >= pEls.length) {
-      // Auto-next chapter logic
       if (pIdx >= pEls.length && state.autoNext && state.chapterIndex < currentChapters.length - 1) {
         showToast('Đang chuyển sang chương kế tiếp…');
         setTimeout(() => {
@@ -509,7 +568,6 @@
     state.isPlaying = true;
     state.isPaused = false;
     
-    // Visual Highlight
     pEls.forEach(el => el.classList.remove('reading-active'));
     const activeEl = $(`para-${pIdx}`);
     if (activeEl) {
@@ -526,7 +584,6 @@
     
     const textToRead = activeEl ? activeEl.textContent.replace(/🔖/g, '').trim() : '';
     if (!textToRead) {
-      // Skip empty or purely decorative paragraphs
       playParagraph(pIdx + 1);
       return;
     }
@@ -539,38 +596,63 @@
       playChromeExtTTS(textToRead, pIdx, currentToken);
     }
     
-    // Auto preload next 5 paragraphs
     if (state.autoPreloadNext) {
       preloadNextParagraphs(pIdx, 5);
     }
   }
 
-  function playEdgeTTS(text, pIdx, token) {
+  async function playEdgeTTS(text, pIdx, token) {
     stopCurrentAudio();
     
     const audio = state.masterAudio;
     audio.playbackRate = state.rate;
     audio.volume = state.isMuted ? 0 : state.volume;
     
-    // Check in-memory preloaded URL
+    const rateStr = `${state.rate >= 1 ? '+' : ''}${Math.round((state.rate - 1) * 100)}%`;
+    const pitchStr = `${state.pitch >= 1 ? '+' : ''}${Math.round((state.pitch - 1) * 50)}Hz`;
+    const cacheKey = `${state.volumeId}_ch${state.chapterIndex}_p${pIdx}_${state.voice}_${rateStr}_${pitchStr}`;
+
+    // 1. Check in-memory preloaded URL
     if (state.preloadedUrls[pIdx]) {
       audio.src = state.preloadedUrls[pIdx];
       audio.play().catch(e => console.warn('Audio play error:', e));
       setupAudioEvents(audio, pIdx, token);
       return;
     }
+
+    // 2. Check IndexedDB cached blob
+    const cachedBlob = await getCachedAudio(cacheKey);
+    if (cachedBlob) {
+      const blobUrl = URL.createObjectURL(cachedBlob);
+      state.preloadedUrls[pIdx] = blobUrl;
+      audio.src = blobUrl;
+      audio.play().catch(e => console.warn('Audio play cached error:', e));
+      setupAudioEvents(audio, pIdx, token);
+      return;
+    }
     
-    // Synthesize via Server endpoint / WebSocket
-    const rateStr = `${state.rate >= 1 ? '+' : ''}${Math.round((state.rate - 1) * 100)}%`;
-    const pitchStr = `${state.pitch >= 1 ? '+' : ''}${Math.round((state.pitch - 1) * 50)}Hz`;
+    // 3. Synthesize via Server endpoint
     const url = `${serverBaseUrl}/api/tts?voice=${encodeURIComponent(state.voice)}&rate=${encodeURIComponent(rateStr)}&pitch=${encodeURIComponent(pitchStr)}&text=${encodeURIComponent(text)}`;
     
-    audio.src = url;
-    audio.play().catch(err => {
-      console.warn('Edge TTS playback error, falling back to WebSpeech:', err);
-      playWebSpeechTTS(text, pIdx, token);
-    });
-    setupAudioEvents(audio, pIdx, token);
+    fetch(url)
+      .then(async res => {
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        const blob = await res.blob();
+        setCachedAudio(cacheKey, blob);
+        const blobUrl = URL.createObjectURL(blob);
+        state.preloadedUrls[pIdx] = blobUrl;
+        if (state.token !== token) return;
+        audio.src = blobUrl;
+        audio.play().catch(err => {
+          console.warn('Audio play error, falling back to WebSpeech:', err);
+          playWebSpeechTTS(text, pIdx, token);
+        });
+        setupAudioEvents(audio, pIdx, token);
+      })
+      .catch(err => {
+        console.warn('Edge TTS network error, falling back to WebSpeech:', err);
+        playWebSpeechTTS(text, pIdx, token);
+      });
   }
 
   function setupAudioEvents(audio, pIdx, token) {
@@ -624,7 +706,6 @@
   }
 
   function playChromeExtTTS(text, pIdx, token) {
-    // Fallback to WebSpeech if chrome.tts is unavailable
     playWebSpeechTTS(text, pIdx, token);
   }
 
@@ -642,11 +723,13 @@
       
       const rateStr = `${state.rate >= 1 ? '+' : ''}${Math.round((state.rate - 1) * 100)}%`;
       const pitchStr = `${state.pitch >= 1 ? '+' : ''}${Math.round((state.pitch - 1) * 50)}Hz`;
+      const cacheKey = `${state.volumeId}_ch${state.chapterIndex}_p${targetIdx}_${state.voice}_${rateStr}_${pitchStr}`;
       const url = `${serverBaseUrl}/api/tts?voice=${encodeURIComponent(state.voice)}&rate=${encodeURIComponent(rateStr)}&pitch=${encodeURIComponent(pitchStr)}&text=${encodeURIComponent(text)}`;
       
       state.audioPreloadPromises[targetIdx] = fetch(url)
         .then(r => r.blob())
         .then(blob => {
+          setCachedAudio(cacheKey, blob);
           state.preloadedUrls[targetIdx] = URL.createObjectURL(blob);
         })
         .catch(err => console.warn(`Preload error for para ${targetIdx}:`, err));
@@ -665,14 +748,12 @@
 
   function togglePlayPause() {
     if (state.isPlaying && !state.isPaused) {
-      // Pause
       state.isPaused = true;
       if (state.masterAudio) state.masterAudio.pause();
       if ('speechSynthesis' in window) window.speechSynthesis.pause();
       updatePlayPauseButtonUI(false);
       setStatusState('PAUSED', 'Tạm dừng đọc');
     } else if (state.isPaused) {
-      // Resume
       state.isPaused = false;
       if (state.masterAudio && state.masterAudio.src) {
         state.masterAudio.play();
@@ -682,7 +763,6 @@
       updatePlayPauseButtonUI(true);
       setStatusState('PLAYING', `Đang đọc đoạn ${state.paragraphIndex + 1}`);
     } else {
-      // Start from saved or first paragraph
       const targetPara = state.paragraphIndex >= 0 ? state.paragraphIndex : (state.progressMap[state.chapterIndex] ?? 0);
       playParagraph(targetPara);
     }
@@ -730,7 +810,6 @@
       }
     }
     
-    // Quick Badges
     const speedBadge = $('playerSpeedBadge');
     if (speedBadge) speedBadge.textContent = `${state.rate.toFixed(2)}×`;
     
@@ -749,11 +828,9 @@
       engineBadge.textContent = state.engine === 'edge' ? 'Edge AI' : (state.engine === 'webspeech' ? 'WebSpeech' : 'Chrome');
     }
     
-    // Header paragraph progress badge
     const chProgBadge = $('chapterParagraphProgress');
     if (chProgBadge) chProgBadge.textContent = `${curP}/${totalParas} đoạn`;
     
-    // Chapter fill bar
     const chProgBar = $('chapterProgressBar');
     if (chProgBar && totalParas > 0) {
       chProgBar.style.width = `${(curP / totalParas) * 100}%`;
@@ -901,7 +978,6 @@
     
     saveBookmarksToStorage();
     
-    // Update active paragraph bookmark button icon
     const bBtn = $(`para-${numPIdx}`)?.querySelector('.para-bookmark-btn');
     if (bBtn) {
       bBtn.classList.toggle('bookmarked', existingIndex < 0);
@@ -1196,7 +1272,6 @@
     
     select.innerHTML = '';
     
-    // Fetch available voices from local server / API
     try {
       const res = await fetch(`${serverBaseUrl}/api/voices`, { signal: AbortSignal.timeout(3000) });
       if (res.ok) {
@@ -1222,7 +1297,6 @@
       select.appendChild(optGroup);
     }
     
-    // WebSpeech fallback voices
     if ('speechSynthesis' in window) {
       const populateWeb = () => {
         const voices = window.speechSynthesis.getVoices();
@@ -1250,13 +1324,11 @@
   // 13. EVENT LISTENERS & WIRING
   // ==========================================================================
   function initEventListeners() {
-    // Topbar Toggles
     $('sidebarToggleBtn')?.addEventListener('click', toggleSidebar);
     $('sidebarCloseBtn')?.addEventListener('click', closeSidebar);
     $('sidebarBackdrop')?.addEventListener('click', closeSidebar);
     $('zenModeBtn')?.addEventListener('click', toggleZenMode);
     
-    // Smart Header Auto-Collapse on Scroll
     const readerArea = $('readerArea');
     if (readerArea) {
       readerArea.addEventListener('scroll', () => {
@@ -1273,7 +1345,6 @@
       }, { passive: true });
     }
     
-    // Volume Switcher Dropdown
     const volPickerBtn = $('volumePickerBtn');
     const volDropdown = $('volumeDropdownMenu');
     if (volPickerBtn && volDropdown) {
@@ -1291,7 +1362,6 @@
       });
     }
 
-    // Theme Switcher Dropdown & Settings Swatches
     const themeBtn = $('themePickerBtn');
     const themeMenu = $('themeDropdownMenu');
     if (themeBtn && themeMenu) {
@@ -1317,14 +1387,12 @@
       };
     });
 
-    // Close Dropdowns on Click Outside
     document.addEventListener('click', () => {
       volDropdown?.setAttribute('hidden', '');
       themeMenu?.setAttribute('hidden', '');
       $('volumePopover')?.setAttribute('hidden', '');
     });
 
-    // Sidebar Tabs
     $$('.tab-btn').forEach(btn => {
       btn.onclick = () => {
         $$('.tab-btn').forEach(b => {
@@ -1340,7 +1408,6 @@
       };
     });
 
-    // Color Gallery & Jump Triggers
     $('colorGalleryBtn')?.addEventListener('click', openColorGallery);
     $('colorGalleryCloseBtn')?.addEventListener('click', () => closeModal('colorGalleryModal'));
     $('colorGalleryBackdrop')?.addEventListener('click', () => closeModal('colorGalleryModal'));
@@ -1349,7 +1416,6 @@
     $('quickJumpCloseBtn')?.addEventListener('click', () => closeModal('quickJumpModal'));
     $('quickJumpBackdrop')?.addEventListener('click', () => closeModal('quickJumpModal'));
 
-    // Sleep Timer Trigger & Modals
     $('sleepTimerBtn')?.addEventListener('click', () => openModal('sleepTimerModal'));
     $('playerTimerPillBtn')?.addEventListener('click', () => openModal('sleepTimerModal'));
     $('sleepTimerCloseBtn')?.addEventListener('click', () => closeModal('sleepTimerModal'));
@@ -1364,7 +1430,6 @@
       };
     });
 
-    // Bookmarks Drawer & Button
     $('bookmarksBtn')?.addEventListener('click', () => {
       if (window.innerWidth <= 900) toggleSidebar();
       $('tabBookmarksBtn')?.click();
@@ -1377,27 +1442,22 @@
       });
     });
 
-    // Settings Toggle Button
     $('settingsToggleBtn')?.addEventListener('click', () => {
       if (window.innerWidth <= 900) toggleSidebar();
       $('tabSettingsBtn')?.click();
     });
 
-    // Shortcuts Modal
     $('shortcutsCloseBtn')?.addEventListener('click', () => closeModal('shortcutsModal'));
     $('shortcutsBackdrop')?.addEventListener('click', () => closeModal('shortcutsModal'));
 
-    // Lightbox Modal
     $('lightboxCloseBtn')?.addEventListener('click', closeLightbox);
     $('lightboxBackdrop')?.addEventListener('click', closeLightbox);
 
-    // Chapter Navigation Buttons
     $('prevChapterBtnTop')?.addEventListener('click', () => loadChapter(state.chapterIndex - 1, true));
     $('nextChapterBtnTop')?.addEventListener('click', () => loadChapter(state.chapterIndex + 1, true));
     $('prevChapterBtnBottom')?.addEventListener('click', () => loadChapter(state.chapterIndex - 1, true));
     $('nextChapterBtnBottom')?.addEventListener('click', () => loadChapter(state.chapterIndex + 1, true));
 
-    // Player Playback Controls
     $('playerPlayPauseBtn')?.addEventListener('click', togglePlayPause);
     $('playerPrevParaBtn')?.addEventListener('click', () => {
       playParagraph(Math.max(0, state.paragraphIndex - 1));
@@ -1407,7 +1467,6 @@
     });
     $('playerStopBtn')?.addEventListener('click', stopPlayback);
     
-    // Seek +/- 5s
     $('playerSeekBackBtn')?.addEventListener('click', () => {
       if (state.masterAudio && state.masterAudio.currentTime) {
         state.masterAudio.currentTime = Math.max(0, state.masterAudio.currentTime - 5);
@@ -1423,7 +1482,6 @@
       }
     });
 
-    // Timeline Click Seek
     $('timelineBar')?.addEventListener('click', (e) => {
       const bar = $('timelineBar');
       if (!bar || !state.masterAudio || !state.masterAudio.duration) return;
@@ -1432,7 +1490,6 @@
       state.masterAudio.currentTime = pct * state.masterAudio.duration;
     });
 
-    // Quick Speed Pill Cycle
     $('speedPillBtn')?.addEventListener('click', () => {
       const speeds = [0.8, 1.0, 1.25, 1.5, 1.75, 2.0];
       const curIdx = speeds.findIndex(s => Math.abs(s - state.rate) < 0.05);
@@ -1440,7 +1497,6 @@
       setRate(nextRate);
     });
 
-    // Volume Popover & Sliders
     const volMuteBtn = $('volumeMuteBtn');
     const volPopover = $('volumePopover');
     const quickVolSlider = $('quickVolumeSlider');
@@ -1460,7 +1516,6 @@
       };
     }
 
-    // Settings Sliders & Inputs
     const rateInput = $('rate');
     if (rateInput) {
       rateInput.oninput = (e) => setRate(Number(e.target.value));
@@ -1530,7 +1585,6 @@
       };
     });
 
-    // Voice Selection & Engine Radio
     $('voiceSelect')?.addEventListener('change', (e) => {
       state.voice = e.target.value;
       saveSettings({ voice: state.voice });
@@ -1546,7 +1600,6 @@
       };
     });
 
-    // Voice Test Button
     $('voiceTestBtn')?.addEventListener('click', () => {
       stopPlayback();
       const testText = 'Xin chào, đây là giọng đọc thử nghiệm của Thiên Sứ Nhà Bên.';
@@ -1557,7 +1610,6 @@
       }
     });
 
-    // Behavior Toggles
     $('autoScrollCheck')?.addEventListener('change', (e) => {
       state.autoScroll = e.target.checked;
       saveSettings({ autoScroll: state.autoScroll });
@@ -1576,16 +1628,14 @@
       saveSettings({ dropCap: state.dropCap });
     });
 
-    // Clear Audio Cache
-    $('clearCacheBtn')?.addEventListener('click', () => {
+    $('clearCacheBtn')?.addEventListener('click', async () => {
       state.preloadedUrls = {};
       state.audioPreloadPromises = {};
-      $('cacheCountLabel').textContent = '0';
-      $('cacheSizeLabel').textContent = '0 KB';
+      await clearIndexedDBCache();
+      updateCacheStatsUI();
       showToast('Đã dọn dẹp sạch sẽ bộ nhớ đệm');
     });
 
-    // Backup & Restore
     $('exportDataBtn')?.addEventListener('click', () => {
       const backup = {
         settings: JSON.parse(localStorage.getItem(STORAGE_SETTINGS) || '{}'),
@@ -1624,7 +1674,6 @@
       reader.readAsText(file);
     });
 
-    // Reset Progress & Reset Settings
     $('resetProgressBtn')?.addEventListener('click', () => {
       showConfirmDialog('Xóa tiến độ đọc?', 'Toàn bộ lịch sử vị trí đọc các chương sẽ được đưa về đầu.', () => {
         state.progressMap = {};
@@ -1644,7 +1693,6 @@
       });
     });
 
-    // Chapter Search Filter
     const searchInput = $('chapterSearch');
     const searchClear = $('searchClearBtn');
     if (searchInput) {
@@ -1674,9 +1722,7 @@
       setTimeout(() => $('chapterSearch')?.focus(), 200);
     });
 
-    // Keyboard Shortcuts Listener
     window.addEventListener('keydown', (e) => {
-      // Ignore if typing in input / select
       const tag = document.activeElement?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
         if (e.key === 'Escape') document.activeElement.blur();
@@ -1722,7 +1768,6 @@
         e.preventDefault();
         openModal('shortcutsModal');
       } else if (e.key === 'Escape') {
-        // Hierarchical escape close
         if (!$('lightboxModal')?.hasAttribute('hidden')) closeLightbox();
         else if (!$('confirmModal')?.hasAttribute('hidden')) closeModal('confirmModal');
         else if (!$('shortcutsModal')?.hasAttribute('hidden')) closeModal('shortcutsModal');
@@ -1779,7 +1824,7 @@
   }
 
   // ==========================================================================
-  // 14. APP BOOTSTRAP
+  // 14. APP BOOTSTRAP & SERVICE WORKER
   // ==========================================================================
   async function initApp() {
     console.info(`[Web Reader Pro] Initializing app (${APP_BUILD})...`);
@@ -1787,7 +1832,6 @@
     applyTheme(state.theme);
     applyTypography();
     
-    // Set initial input values in Settings
     if ($('rate')) $('rate').value = state.rate;
     if ($('rateValue')) $('rateValue').textContent = `${state.rate.toFixed(2)}×`;
     if ($('pitch')) $('pitch').value = state.pitch;
@@ -1813,8 +1857,8 @@
     initEventListeners();
     renderBookmarksList();
     updateBookmarkBadge();
+    updateCacheStatsUI();
     
-    // Volume & Chapter Setup
     const volData = getActiveVolumeData();
     const countInfo = getVolumeCountBreakdown(volData.id);
     
@@ -1829,14 +1873,18 @@
     renderQuickChapterChips();
     updateOverallProgress();
     
-    // Load initial chapter
     loadChapter(state.chapterIndex, false);
     
-    // Asynchronously load available voices
     await loadVoices();
+
+    // Register PWA Service Worker gracefully
+    if ('serviceWorker' in navigator && isHttp) {
+      navigator.serviceWorker.register('./sw.js').catch(err => {
+        console.warn('PWA ServiceWorker register notice:', err.message);
+      });
+    }
   }
 
-  // Start app when DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initApp);
   } else {

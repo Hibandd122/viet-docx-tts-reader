@@ -1,7 +1,7 @@
 /**
  * ==========================================================================
- * WEB READER PRO · APPLICATION CORE (MOBILE-FIRST LUXURY UX & TTS)
- * Senior Frontend & Mobile UX Architecture · Multi-Engine TTS
+ * WEB READER PRO · APPLICATION CORE (PRODUCTION HARDENED)
+ * Audio/TTS Engine · Generation Token Guard · Memory Cleanup · LRU Cache
  * ==========================================================================
  */
 
@@ -13,14 +13,15 @@
   const $ = id => document.getElementById(id);
   const $$ = sel => document.querySelectorAll(sel);
 
-  // Storage Keys (100% Backward Compatible)
+  // Storage Keys & Constants
   const STORAGE_SETTINGS = 'vol9_pro_settings';
   const STORAGE_PROGRESS = 'vol9_pro_progress';
   const STORAGE_BOOKMARKS = 'vol9_pro_bookmarks';
-  const DB_NAME = 'WebReaderProAudioDB';
-  const DB_STORE = 'audio_chunks';
-  const DB_VERSION = 1;
-  const APP_BUILD = 'ux-mobile-pro-v3';
+  const DB_NAME = 'WebReaderProAudioDB_v2';
+  const DB_STORE = 'audio_chunks_v2';
+  const DB_VERSION = 2;
+  const MAX_CACHE_BYTES = 120 * 1024 * 1024; // 120 MB maximum audio cache
+  const APP_BUILD = 'prod-hardened-v2.5';
 
   // Environment detection
   const isExtension = typeof chrome !== 'undefined' && Boolean(chrome.runtime?.id);
@@ -38,21 +39,124 @@
     try { return JSON.parse(localStorage.getItem(STORAGE_BOOKMARKS) || '[]'); } catch { return []; }
   })();
 
-  // IndexedDB Audio Cache
+  // ==========================================================================
+  // 1. GENERATION & ASYNC CANCELLATION CONTROLLER
+  // ==========================================================================
+  let playbackGeneration = 0;
+  let chapterGeneration = 0;
+  let foregroundAbortController = null;
+  const preloadAbortControllers = new Map(); // key -> AbortController
+  const managedObjectUrls = new Map();       // url -> { blob, key, createdAt, tag }
+
+  function getParagraphKey(volId, chapIdx, pIdx, voice, rate, pitch) {
+    const rStr = `${rate >= 1 ? '+' : ''}${Math.round((rate - 1) * 100)}%`;
+    const pStr = `${pitch >= 1 ? '+' : ''}${Math.round((pitch - 1) * 50)}Hz`;
+    return `${volId}:ch${chapIdx}:p${pIdx}:${voice}:${rStr}:${pStr}`;
+  }
+
+  function createManagedObjectUrl(blob, key, tag = 'general') {
+    if (!blob) return null;
+    try {
+      const url = URL.createObjectURL(blob);
+      managedObjectUrls.set(url, { blob, key, createdAt: Date.now(), tag });
+      return url;
+    } catch {
+      return null;
+    }
+  }
+
+  function revokeManagedObjectUrl(url) {
+    if (!url || typeof url !== 'string') return;
+    if (managedObjectUrls.has(url)) {
+      try { URL.revokeObjectURL(url); } catch {}
+      managedObjectUrls.delete(url);
+    }
+  }
+
+  function revokeAllManagedObjectUrls(filterTag = null) {
+    for (const [url, meta] of managedObjectUrls.entries()) {
+      if (!filterTag || meta.tag === filterTag) {
+        try { URL.revokeObjectURL(url); } catch {}
+        managedObjectUrls.delete(url);
+      }
+    }
+  }
+
+  function nextPlaybackGeneration() {
+    playbackGeneration++;
+    
+    // Abort active foreground fetch if running
+    if (foregroundAbortController) {
+      try { foregroundAbortController.abort('superseded'); } catch {}
+      foregroundAbortController = null;
+    }
+
+    // Completely detach and stop any active HTMLAudioElement
+    if (state.masterAudio) {
+      state.masterAudio.onended = null;
+      state.masterAudio.onerror = null;
+      state.masterAudio.ontimeupdate = null;
+      state.masterAudio.oncanplay = null;
+      try { state.masterAudio.pause(); } catch {}
+      if (state.activeAudioUrl) {
+        revokeManagedObjectUrl(state.activeAudioUrl);
+        state.activeAudioUrl = null;
+      }
+      try {
+        state.masterAudio.removeAttribute('src');
+        state.masterAudio.load();
+      } catch {}
+    }
+
+    // Cancel Web Speech Synthesis
+    if ('speechSynthesis' in window) {
+      try { window.speechSynthesis.cancel(); } catch {}
+    }
+
+    return playbackGeneration;
+  }
+
+  function nextChapterGeneration() {
+    chapterGeneration++;
+    nextPlaybackGeneration();
+
+    // Abort all in-flight preloads
+    for (const [key, ctrl] of preloadAbortControllers.entries()) {
+      try { ctrl.abort('chapter_changed'); } catch {}
+    }
+    preloadAbortControllers.clear();
+
+    // Revoke all preload object URLs from memory
+    revokeAllManagedObjectUrls('preload');
+    state.preloadedUrls = {};
+    state.audioPreloadPromises = {};
+
+    return chapterGeneration;
+  }
+
+  // ==========================================================================
+  // 2. HARDENED INDEXEDDB AUDIO CACHE WITH LRU EVICTION
+  // ==========================================================================
   let dbPromise = null;
   function getDB() {
     if (!dbPromise) {
       dbPromise = new Promise((resolve) => {
         if (!('indexedDB' in window)) return resolve(null);
-        const req = indexedDB.open(DB_NAME, DB_VERSION);
-        req.onupgradeneeded = (e) => {
-          const db = e.target.result;
-          if (!db.objectStoreNames.contains(DB_STORE)) {
-            db.createObjectStore(DB_STORE, { keyPath: 'key' });
-          }
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => resolve(null);
+        try {
+          const req = indexedDB.open(DB_NAME, DB_VERSION);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(DB_STORE)) {
+              const store = db.createObjectStore(DB_STORE, { keyPath: 'key' });
+              store.createIndex('lastAccess', 'lastAccess', { unique: false });
+              store.createIndex('size', 'size', { unique: false });
+            }
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(null);
+        } catch {
+          resolve(null);
+        }
       });
     }
     return dbPromise;
@@ -63,10 +167,20 @@
       const db = await getDB();
       if (!db) return null;
       return new Promise((resolve) => {
-        const tx = db.transaction(DB_STORE, 'readonly');
+        const tx = db.transaction(DB_STORE, 'readwrite');
         const store = tx.objectStore(DB_STORE);
         const req = store.get(key);
-        req.onsuccess = () => resolve(req.result?.blob || null);
+        req.onsuccess = () => {
+          const item = req.result;
+          if (item && item.blob) {
+            // Update last access time for LRU
+            item.lastAccess = Date.now();
+            try { store.put(item); } catch {}
+            resolve(item.blob);
+          } else {
+            resolve(null);
+          }
+        };
         req.onerror = () => resolve(null);
       });
     } catch {
@@ -74,14 +188,55 @@
     }
   }
 
-  async function setCachedAudio(key, blob) {
+  async function setCachedAudio(key, blob, volId = '', chapIdx = 0, paraIdx = 0) {
+    if (!blob || !(blob instanceof Blob)) return;
     try {
       const db = await getDB();
       if (!db) return;
+
+      // LRU Eviction check
+      await evictCacheIfNeeded(db, blob.size);
+
       const tx = db.transaction(DB_STORE, 'readwrite');
       const store = tx.objectStore(DB_STORE);
-      store.put({ key, blob, time: Date.now() });
-      updateCacheStatsUI();
+      const entry = {
+        key,
+        blob,
+        size: blob.size,
+        createdAt: Date.now(),
+        lastAccess: Date.now(),
+        volId,
+        chapIdx,
+        paraIdx
+      };
+      store.put(entry);
+      tx.oncomplete = () => updateCacheStatsUI();
+    } catch (err) {
+      console.warn('IndexedDB setCachedAudio notice:', err);
+    }
+  }
+
+  async function evictCacheIfNeeded(db, incomingBytes) {
+    try {
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      const store = tx.objectStore(DB_STORE);
+      const req = store.getAll();
+      
+      req.onsuccess = () => {
+        const items = req.result || [];
+        let totalSize = items.reduce((sum, item) => sum + (item.size || 0), 0);
+        
+        if (totalSize + incomingBytes > MAX_CACHE_BYTES) {
+          // Sort ascending by lastAccess (oldest accessed first)
+          items.sort((a, b) => (a.lastAccess || 0) - (b.lastAccess || 0));
+          
+          for (const oldItem of items) {
+            if (totalSize + incomingBytes <= MAX_CACHE_BYTES * 0.85) break;
+            store.delete(oldItem.key);
+            totalSize -= (oldItem.size || 0);
+          }
+        }
+      };
     } catch {}
   }
 
@@ -100,18 +255,27 @@
       if (!db) return;
       const tx = db.transaction(DB_STORE, 'readonly');
       const store = tx.objectStore(DB_STORE);
-      const countReq = store.count();
-      countReq.onsuccess = () => {
-        const count = countReq.result || 0;
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const items = req.result || [];
+        const count = items.length;
+        const totalBytes = items.reduce((sum, item) => sum + (item.size || 0), 0);
+        
         const countEl = $('cacheCountLabel');
         if (countEl) countEl.textContent = count.toLocaleString();
+        
         const sizeEl = $('cacheSizeLabel');
-        if (sizeEl) sizeEl.textContent = `~${(count * 22).toLocaleString()} KB`;
+        if (sizeEl) {
+          const mb = totalBytes / (1024 * 1024);
+          sizeEl.textContent = mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.round(totalBytes / 1024)} KB`;
+        }
       };
     } catch {}
   }
 
-  // Multi-Volume Support
+  // ==========================================================================
+  // 3. BOOK STATS & DATA MODEL CONSISTENCY (NO HARDCODING)
+  // ==========================================================================
   function getActiveVolumeId() {
     return state?.volumeId || savedProgress.lastVolume || window.ACTIVE_VOLUME_ID || 'vol10';
   }
@@ -128,11 +292,29 @@
     };
   }
 
-  function getVolumeCountBreakdown(volId) {
-    if (volId === 'vol10') {
-      return { total: 12, text: '10 chương · 6 ngoại truyện · 1 lời bạt' };
-    }
-    return { total: 10, text: '10 chương đầy đủ' };
+  function getBookStats(volData) {
+    const chapters = volData.chapters || [];
+    let chapCount = 0;
+    let extraCount = 0;
+    let afterwordCount = 0;
+
+    chapters.forEach(ch => {
+      const title = (ch.title || '').toLowerCase();
+      if (title.includes('lời bạt')) {
+        afterwordCount++;
+      } else if (title.includes('ngoại truyện') || title.includes('truyện ngắn')) {
+        extraCount++;
+      } else {
+        chapCount++;
+      }
+    });
+
+    const total = chapters.length;
+    let text = `${chapCount} chương`;
+    if (extraCount > 0) text += ` · ${extraCount} ngoại truyện`;
+    if (afterwordCount > 0) text += ` · ${afterwordCount} lời bạt`;
+
+    return { total, chapters: chapCount, extras: extraCount, afterwords: afterwordCount, text };
   }
 
   // App State Model
@@ -150,23 +332,22 @@
     isPlaying: false,
     isPaused: false,
     isLoadingAudio: false,
-    token: 0,
     wakeLock: null,
+    activeAudioUrl: null,
 
     // Audio & TTS Engine
-    engine: savedSettings.engine || 'edge', // 'edge' | 'webspeech' | 'chrome-ext'
+    engine: savedSettings.engine || 'edge',
     voice: savedSettings.voice || 'vi-VN-HoaiMyNeural',
     rate: Number(savedSettings.rate ?? 1.0),
     pitch: Number(savedSettings.pitch ?? 1.0),
     volume: Number(savedSettings.volume ?? 1.0),
     isMuted: savedSettings.isMuted === true,
-    prevVolume: 1.0,
 
     // Voices catalog
     edgeVoices: [],
     webVoices: [],
 
-    // Reader UI Preferences
+    // Reader Preferences
     theme: savedSettings.theme || 'deep-night',
     font: savedSettings.font || "'Be Vietnam Pro', sans-serif",
     fontSize: Number(savedSettings.fontSize ?? 18),
@@ -189,9 +370,9 @@
       intervalId: null
     },
 
-    // Audio Engine Instances
+    // Audio Engine
     masterAudio: new Audio(),
-    preloadedUrls: {},
+    preloadedUrls: {}, // key -> objectUrl
     audioPreloadPromises: {},
     saveProgressTimer: null,
     lastScrollY: 0,
@@ -206,14 +387,12 @@
   );
 
   // ==========================================================================
-  // 1. DYNAMIC MEASUREMENT & SAFE AREA
+  // 4. DYNAMIC MEASUREMENT & SAFE AREA
   // ==========================================================================
   function updateDynamicLayoutMeasurements() {
-    // Measure dynamic viewport height
     const vh = window.innerHeight;
     document.documentElement.style.setProperty('--app-height', `${vh}px`);
 
-    // Measure player actual rendered height
     const player = $('audioPlayer');
     if (player) {
       const rect = player.getBoundingClientRect();
@@ -233,7 +412,7 @@
   }
 
   // ==========================================================================
-  // 2. PERSISTENCE & STORAGE (DEBOUNCED)
+  // 5. PERSISTENCE (DEBOUNCED)
   // ==========================================================================
   function saveSettings(patch = {}) {
     Object.assign(state, patch);
@@ -283,7 +462,7 @@
   }
 
   // ==========================================================================
-  // 3. TOASTS, STATUS & BADGES
+  // 6. TOASTS & STATUS
   // ==========================================================================
   function showToast(message, duration = 2500) {
     const container = $('toastContainer');
@@ -330,7 +509,7 @@
   }
 
   // ==========================================================================
-  // 4. THEME & TYPOGRAPHY APPLIERS
+  // 7. THEMES & TYPOGRAPHY
   // ==========================================================================
   function applyTheme(themeName) {
     state.theme = themeName;
@@ -358,7 +537,6 @@
       swatch.style.background = colors[themeName] || '#818cf8';
     }
 
-    // Update theme-color meta for mobile browser chrome
     const themeMeta = document.querySelector('meta[name="theme-color"]');
     if (themeMeta) {
       const metaColors = {
@@ -391,11 +569,11 @@
   }
 
   // ==========================================================================
-  // 5. VOLUME SWITCHING & DATA BINDING
+  // 8. MULTI-VOLUME SWITCHING
   // ==========================================================================
   function switchVolume(volId) {
     if (!window.VOLUMES || !window.VOLUMES[volId]) return;
-    stopPlayback();
+    nextChapterGeneration();
     
     state.volumeId = volId;
     window.ACTIVE_VOLUME_ID = volId;
@@ -404,6 +582,8 @@
     const volData = window.VOLUMES[volId];
     state.chapterIndex = 0;
     state.paragraphIndex = -1;
+    
+    const stats = getBookStats(volData);
     
     const volBadge = $('appVolumeBadge');
     if (volBadge) volBadge.textContent = volData.id.toUpperCase();
@@ -414,12 +594,11 @@
     const cardTitle = $('volCardTitle');
     if (cardTitle) cardTitle.textContent = volData.title;
     
-    const countInfo = getVolumeCountBreakdown(volId);
     const cardSub = $('volCardSub');
-    if (cardSub) cardSub.textContent = countInfo.text;
+    if (cardSub) cardSub.textContent = stats.text;
     
     const badgeCount = $('chapterBadgeCount');
-    if (badgeCount) badgeCount.textContent = `(${countInfo.total})`;
+    if (badgeCount) badgeCount.textContent = `(${stats.total})`;
     
     const cardCover = $('volCardCover');
     if (cardCover && volData.cover) cardCover.src = volData.cover;
@@ -429,7 +608,6 @@
     });
     
     saveReadingProgress(0, 0);
-    
     renderChapterList();
     renderQuickChapterChips();
     loadChapter(0, true);
@@ -438,7 +616,7 @@
   }
 
   // ==========================================================================
-  // 6. CHAPTER RENDERING & READING SPY
+  // 9. CHAPTER RENDERING
   // ==========================================================================
   function loadChapter(index, forceScrollTop = false) {
     const volData = getActiveVolumeData();
@@ -446,10 +624,8 @@
     
     if (index < 0 || index >= currentChapters.length) return;
     
-    stopPlayback();
+    nextChapterGeneration();
     state.chapterIndex = index;
-    state.preloadedUrls = {};
-    state.audioPreloadPromises = {};
     
     const chapter = currentChapters[index];
     setStatusState('LOADING_BOOK', 'Đang nạp chương…');
@@ -496,7 +672,7 @@
     contentEl.innerHTML = '';
     
     let pIdx = 0;
-    (chapter.blocks || []).forEach((block, bIdx) => {
+    (chapter.blocks || []).forEach((block) => {
       if (block.type === 'p') {
         const p = document.createElement('p');
         p.id = `para-${pIdx}`;
@@ -531,10 +707,7 @@
         }
         
         p.appendChild(bBtn);
-        
-        p.onclick = () => {
-          playParagraph(Number(p.dataset.index));
-        };
+        p.onclick = () => playParagraph(Number(p.dataset.index));
         
         contentEl.appendChild(p);
         pIdx++;
@@ -581,7 +754,7 @@
   }
 
   // ==========================================================================
-  // 7. REDESIGNED TTS PLAYBACK CONTROLLER & SPAM PROTECTION
+  // 10. HARDENED TTS PLAYBACK PIPELINE (RACE-CONDITION FREE)
   // ==========================================================================
   async function playParagraph(pIdx) {
     const volData = getActiveVolumeData();
@@ -603,8 +776,10 @@
       return;
     }
     
-    state.token++;
-    const currentToken = state.token;
+    // Acquire fresh generation tokens
+    const pGen = nextPlaybackGeneration();
+    const cGen = chapterGeneration;
+
     state.paragraphIndex = pIdx;
     state.isPlaying = true;
     state.isPaused = false;
@@ -628,87 +803,117 @@
     
     const textToRead = activeEl ? activeEl.textContent.replace(/🔖/g, '').trim() : '';
     if (!textToRead) {
-      playParagraph(pIdx + 1);
+      if (pGen === playbackGeneration && cGen === chapterGeneration) {
+        playParagraph(pIdx + 1);
+      }
       return;
     }
     
     if (state.engine === 'edge') {
-      playEdgeTTS(textToRead, pIdx, currentToken);
-    } else if (state.engine === 'webspeech') {
-      playWebSpeechTTS(textToRead, pIdx, currentToken);
+      await playEdgeTTS(textToRead, pIdx, pGen, cGen);
     } else {
-      playChromeExtTTS(textToRead, pIdx, currentToken);
+      playWebSpeechTTS(textToRead, pIdx, pGen, cGen);
     }
     
-    if (state.autoPreloadNext) {
-      preloadNextParagraphs(pIdx, 5);
+    if (state.autoPreloadNext && pGen === playbackGeneration && cGen === chapterGeneration) {
+      preloadNextParagraphs(pIdx, 5, cGen);
     }
   }
 
-  async function playEdgeTTS(text, pIdx, token) {
-    stopCurrentAudio();
-    
+  async function playEdgeTTS(text, pIdx, pGen, cGen) {
     const audio = state.masterAudio;
     audio.playbackRate = state.rate;
     audio.volume = state.isMuted ? 0 : state.volume;
     
-    const rateStr = `${state.rate >= 1 ? '+' : ''}${Math.round((state.rate - 1) * 100)}%`;
-    const pitchStr = `${state.pitch >= 1 ? '+' : ''}${Math.round((state.pitch - 1) * 50)}Hz`;
-    const cacheKey = `${state.volumeId}_ch${state.chapterIndex}_p${pIdx}_${state.voice}_${rateStr}_${pitchStr}`;
+    const cacheKey = getParagraphKey(state.volumeId, state.chapterIndex, pIdx, state.voice, state.rate, state.pitch);
 
-    // 1. Check in-memory preloaded URL
-    if (state.preloadedUrls[pIdx]) {
-      audio.src = state.preloadedUrls[pIdx];
-      audio.play().catch(e => console.warn('Audio play error:', e));
-      updatePlayPauseButtonUI(true, false);
-      setupAudioEvents(audio, pIdx, token);
+    // 1. Check in-memory preloaded URL (Keyed by full identity)
+    if (state.preloadedUrls[cacheKey]) {
+      if (pGen !== playbackGeneration || cGen !== chapterGeneration) return;
+      const url = state.preloadedUrls[cacheKey];
+      state.activeAudioUrl = url;
+      audio.src = url;
+      attachAudioEvents(audio, pIdx, pGen, cGen);
+      try {
+        await audio.play();
+        if (pGen === playbackGeneration && cGen === chapterGeneration) {
+          updatePlayPauseButtonUI(true, false);
+        }
+      } catch (err) {
+        if (pGen === playbackGeneration && cGen === chapterGeneration) {
+          console.warn('Audio play error, falling back to WebSpeech:', err);
+          playWebSpeechTTS(text, pIdx, pGen, cGen);
+        }
+      }
       return;
     }
 
     // 2. Check IndexedDB cached blob
     const cachedBlob = await getCachedAudio(cacheKey);
+    if (pGen !== playbackGeneration || cGen !== chapterGeneration) return;
+
     if (cachedBlob) {
-      const blobUrl = URL.createObjectURL(cachedBlob);
-      state.preloadedUrls[pIdx] = blobUrl;
+      const blobUrl = createManagedObjectUrl(cachedBlob, cacheKey, 'active');
+      state.activeAudioUrl = blobUrl;
       audio.src = blobUrl;
-      audio.play().catch(e => console.warn('Audio play cached error:', e));
-      updatePlayPauseButtonUI(true, false);
-      setupAudioEvents(audio, pIdx, token);
+      attachAudioEvents(audio, pIdx, pGen, cGen);
+      try {
+        await audio.play();
+        if (pGen === playbackGeneration && cGen === chapterGeneration) {
+          updatePlayPauseButtonUI(true, false);
+        }
+      } catch (err) {
+        if (pGen === playbackGeneration && cGen === chapterGeneration) {
+          console.warn('Cached audio play error, falling back to WebSpeech:', err);
+          playWebSpeechTTS(text, pIdx, pGen, cGen);
+        }
+      }
       return;
     }
     
-    // 3. Synthesize via Server endpoint
+    // 3. Synthesize via Server endpoint with AbortController
+    foregroundAbortController = new AbortController();
+    const rateStr = `${state.rate >= 1 ? '+' : ''}${Math.round((state.rate - 1) * 100)}%`;
+    const pitchStr = `${state.pitch >= 1 ? '+' : ''}${Math.round((state.pitch - 1) * 50)}Hz`;
     const url = `${serverBaseUrl}/api/tts?voice=${encodeURIComponent(state.voice)}&rate=${encodeURIComponent(rateStr)}&pitch=${encodeURIComponent(pitchStr)}&text=${encodeURIComponent(text)}`;
     
-    fetch(url)
-      .then(async res => {
-        if (!res.ok) throw new Error(`Server returned ${res.status}`);
-        const blob = await res.blob();
-        setCachedAudio(cacheKey, blob);
-        const blobUrl = URL.createObjectURL(blob);
-        state.preloadedUrls[pIdx] = blobUrl;
-        if (state.token !== token) return;
-        audio.src = blobUrl;
-        audio.play().catch(err => {
-          console.warn('Audio play error, falling back to WebSpeech:', err);
-          playWebSpeechTTS(text, pIdx, token);
-        });
+    try {
+      const res = await fetch(url, { signal: foregroundAbortController.signal });
+      if (pGen !== playbackGeneration || cGen !== chapterGeneration) return;
+      
+      if (!res.ok) throw new Error(`Server returned status ${res.status}`);
+      const blob = await res.blob();
+      if (pGen !== playbackGeneration || cGen !== chapterGeneration) return;
+
+      // Cache safely in IndexedDB
+      setCachedAudio(cacheKey, blob, state.volumeId, state.chapterIndex, pIdx);
+
+      const blobUrl = createManagedObjectUrl(blob, cacheKey, 'active');
+      state.activeAudioUrl = blobUrl;
+      audio.src = blobUrl;
+      attachAudioEvents(audio, pIdx, pGen, cGen);
+
+      await audio.play();
+      if (pGen === playbackGeneration && cGen === chapterGeneration) {
         updatePlayPauseButtonUI(true, false);
-        setupAudioEvents(audio, pIdx, token);
-      })
-      .catch(err => {
-        console.warn('Edge TTS network error, falling back to WebSpeech:', err);
-        playWebSpeechTTS(text, pIdx, token);
-      });
+      }
+    } catch (err) {
+      if (err.name === 'AbortError' || pGen !== playbackGeneration || cGen !== chapterGeneration) {
+        // Normal intentional cancellation; ignore
+        return;
+      }
+      console.warn('Edge TTS synthesis error, falling back to WebSpeech:', err);
+      playWebSpeechTTS(text, pIdx, pGen, cGen);
+    }
   }
 
-  function setupAudioEvents(audio, pIdx, token) {
+  function attachAudioEvents(audio, pIdx, pGen, cGen) {
     audio.onended = () => {
-      if (state.token !== token) return;
+      if (pGen !== playbackGeneration || cGen !== chapterGeneration) return;
       playParagraph(pIdx + 1);
     };
     audio.ontimeupdate = () => {
-      if (state.token !== token) return;
+      if (pGen !== playbackGeneration || cGen !== chapterGeneration) return;
       const cur = audio.currentTime || 0;
       const dur = audio.duration || 1;
       const fill = $('timelineFill');
@@ -719,19 +924,19 @@
       if (totalLabel && isFinite(dur)) totalLabel.textContent = formatTime(dur);
     };
     audio.onerror = (e) => {
-      if (state.token !== token) return;
-      console.warn('Audio element error, trying next segment:', e);
+      if (pGen !== playbackGeneration || cGen !== chapterGeneration) return;
+      console.warn('Audio playback error, auto-recovering:', e);
       playParagraph(pIdx + 1);
     };
   }
 
-  function playWebSpeechTTS(text, pIdx, token) {
+  function playWebSpeechTTS(text, pIdx, pGen, cGen) {
     if (!('speechSynthesis' in window)) {
       showToast('Trình duyệt không hỗ trợ Web Speech API');
       stopPlayback();
       return;
     }
-    window.speechSynthesis.cancel();
+    try { window.speechSynthesis.cancel(); } catch {}
     
     const utter = new SpeechSynthesisUtterance(text);
     utter.rate = state.rate;
@@ -740,60 +945,73 @@
     utter.lang = 'vi-VN';
     
     utter.onstart = () => {
-      if (state.token !== token) return;
+      if (pGen !== playbackGeneration || cGen !== chapterGeneration) {
+        try { window.speechSynthesis.cancel(); } catch {}
+        return;
+      }
       updatePlayPauseButtonUI(true, false);
     };
     utter.onend = () => {
-      if (state.token !== token) return;
+      if (pGen !== playbackGeneration || cGen !== chapterGeneration) return;
       playParagraph(pIdx + 1);
     };
     utter.onerror = (err) => {
-      if (state.token !== token) return;
-      console.warn('WebSpeech error:', err);
+      if (pGen !== playbackGeneration || cGen !== chapterGeneration) return;
+      console.warn('WebSpeech utterance error:', err);
       playParagraph(pIdx + 1);
     };
     
     window.speechSynthesis.speak(utter);
   }
 
-  function playChromeExtTTS(text, pIdx, token) {
-    playWebSpeechTTS(text, pIdx, token);
-  }
-
-  function preloadNextParagraphs(currentIdx, count = 5) {
+  // ==========================================================================
+  // 11. HARDENED PRELOAD PIPELINE (ISOLATED BY FULL KEY & CHAPTER GEN)
+  // ==========================================================================
+  function preloadNextParagraphs(currentIdx, count = 5, cGen = chapterGeneration) {
     const pEls = $$('#content p');
     for (let i = 1; i <= count; i++) {
       const targetIdx = currentIdx + i;
       if (targetIdx >= pEls.length) break;
-      if (state.preloadedUrls[targetIdx] || state.audioPreloadPromises[targetIdx]) continue;
-      
+      if (cGen !== chapterGeneration) break;
+
+      const cacheKey = getParagraphKey(state.volumeId, state.chapterIndex, targetIdx, state.voice, state.rate, state.pitch);
+      if (state.preloadedUrls[cacheKey] || state.audioPreloadPromises[cacheKey]) continue;
+
       const p = $(`para-${targetIdx}`);
       if (!p) continue;
       const text = p.textContent.replace(/🔖/g, '').trim();
       if (!text) continue;
-      
+
+      const ctrl = new AbortController();
+      preloadAbortControllers.set(cacheKey, ctrl);
+
       const rateStr = `${state.rate >= 1 ? '+' : ''}${Math.round((state.rate - 1) * 100)}%`;
       const pitchStr = `${state.pitch >= 1 ? '+' : ''}${Math.round((state.pitch - 1) * 50)}Hz`;
-      const cacheKey = `${state.volumeId}_ch${state.chapterIndex}_p${targetIdx}_${state.voice}_${rateStr}_${pitchStr}`;
       const url = `${serverBaseUrl}/api/tts?voice=${encodeURIComponent(state.voice)}&rate=${encodeURIComponent(rateStr)}&pitch=${encodeURIComponent(pitchStr)}&text=${encodeURIComponent(text)}`;
-      
-      state.audioPreloadPromises[targetIdx] = fetch(url)
-        .then(r => r.blob())
-        .then(blob => {
-          setCachedAudio(cacheKey, blob);
-          state.preloadedUrls[targetIdx] = URL.createObjectURL(blob);
-        })
-        .catch(err => console.warn(`Preload error for para ${targetIdx}:`, err));
-    }
-  }
 
-  function stopCurrentAudio() {
-    if (state.masterAudio) {
-      state.masterAudio.pause();
-      state.masterAudio.removeAttribute('src');
-    }
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+      state.audioPreloadPromises[cacheKey] = fetch(url, { signal: ctrl.signal })
+        .then(r => {
+          if (!r.ok) throw new Error(`Preload status ${r.status}`);
+          return r.blob();
+        })
+        .then(blob => {
+          preloadAbortControllers.delete(cacheKey);
+          if (cGen !== chapterGeneration) {
+            // Chapter changed while downloading; do not assign to state
+            return;
+          }
+          setCachedAudio(cacheKey, blob, state.volumeId, state.chapterIndex, targetIdx);
+          const managedUrl = createManagedObjectUrl(blob, cacheKey, 'preload');
+          if (managedUrl) {
+            state.preloadedUrls[cacheKey] = managedUrl;
+          }
+        })
+        .catch(err => {
+          preloadAbortControllers.delete(cacheKey);
+          if (err.name !== 'AbortError') {
+            // Non-critical preload failure
+          }
+        });
     }
   }
 
@@ -808,7 +1026,7 @@
     } else if (state.isPaused) {
       state.isPaused = false;
       if (state.masterAudio && state.masterAudio.src) {
-        state.masterAudio.play();
+        state.masterAudio.play().catch(() => playParagraph(state.paragraphIndex));
       } else {
         playParagraph(state.paragraphIndex >= 0 ? state.paragraphIndex : 0);
       }
@@ -822,11 +1040,10 @@
   }
 
   function stopPlayback() {
-    state.token++;
+    nextPlaybackGeneration();
     state.isPlaying = false;
     state.isPaused = false;
     state.isLoadingAudio = false;
-    stopCurrentAudio();
     updatePlayPauseButtonUI(false, false);
     releaseScreenWakeLock();
     $$('#content p').forEach(el => el.classList.remove('reading-active'));
@@ -886,7 +1103,7 @@
     
     const engineBadge = $('playerEngineBadge');
     if (engineBadge) {
-      engineBadge.textContent = state.engine === 'edge' ? 'Edge AI' : (state.engine === 'webspeech' ? 'WebSpeech' : 'Chrome');
+      engineBadge.textContent = state.engine === 'edge' ? 'Edge AI' : 'WebSpeech';
     }
     
     const chProgBadge = $('chapterParagraphProgress');
@@ -908,7 +1125,7 @@
   }
 
   // ==========================================================================
-  // 8. MEDIA SESSION API & SCREEN WAKE LOCK
+  // 12. MEDIA SESSION & WAKE LOCK
   // ==========================================================================
   function updateMediaSessionMetadata() {
     if (!('mediaSession' in navigator)) return;
@@ -973,7 +1190,7 @@
   });
 
   // ==========================================================================
-  // 9. SIDEBAR, TOC & QUICK JUMP
+  // 13. SIDEBAR, TOC & QUICK NAVIGATION
   // ==========================================================================
   function renderChapterList() {
     const listEl = $('chapterList');
@@ -1082,7 +1299,7 @@
   }
 
   // ==========================================================================
-  // 10. BOOKMARKS MANAGER
+  // 14. BOOKMARKS
   // ==========================================================================
   function toggleBookmark(volId, chapIdx, pIdx, text) {
     const numPIdx = Number(pIdx);
@@ -1172,7 +1389,7 @@
   }
 
   // ==========================================================================
-  // 11. QUICK SPEED SHEET & SLEEP TIMER
+  // 15. SPEED & SLEEP TIMER
   // ==========================================================================
   function openSpeedSheet() {
     $$('.speed-opt-btn').forEach(btn => {
@@ -1282,7 +1499,7 @@
   }
 
   // ==========================================================================
-  // 12. MODALS, LIGHTBOX & BOTTOM SHEETS
+  // 16. MODALS & LIGHTBOX
   // ==========================================================================
   function openLightbox(src, caption = '') {
     const modal = $('lightboxModal');
@@ -1402,7 +1619,7 @@
   }
 
   // ==========================================================================
-  // 13. SIDEBAR & ZEN FOCUS MODE
+  // 17. SIDEBAR & ZEN MODE
   // ==========================================================================
   function toggleSidebar() {
     const sidebar = $('sidebar');
@@ -1435,7 +1652,7 @@
   }
 
   // ==========================================================================
-  // 14. VOICES LOADER & INITIALIZER
+  // 18. VOICES INITIALIZATION
   // ==========================================================================
   async function loadVoices() {
     const select = $('voiceSelect');
@@ -1492,7 +1709,7 @@
   }
 
   // ==========================================================================
-  // 15. EVENT LISTENERS & WIRING
+  // 19. EVENT LISTENERS
   // ==========================================================================
   function initEventListeners() {
     $('sidebarToggleBtn')?.addEventListener('click', toggleSidebar);
@@ -1500,7 +1717,6 @@
     $('sidebarBackdrop')?.addEventListener('click', closeSidebar);
     $('zenModeBtn')?.addEventListener('click', toggleZenMode);
     
-    // Auto-collapse header on scroll
     const readerArea = $('readerArea');
     if (readerArea) {
       readerArea.addEventListener('scroll', () => {
@@ -1517,7 +1733,6 @@
       }, { passive: true });
     }
     
-    // Volume Picker Dropdown
     const volPickerBtn = $('volumePickerBtn');
     const volDropdown = $('volumeDropdownMenu');
     if (volPickerBtn && volDropdown) {
@@ -1535,7 +1750,6 @@
       });
     }
 
-    // Theme Picker Dropdown & Settings Swatches
     const themeBtn = $('themePickerBtn');
     const themeMenu = $('themeDropdownMenu');
     if (themeBtn && themeMenu) {
@@ -1567,7 +1781,6 @@
       $('volumePopover')?.setAttribute('hidden', '');
     });
 
-    // Sidebar Tabs
     $$('.tab-btn').forEach(btn => {
       btn.onclick = () => {
         $$('.tab-btn').forEach(b => {
@@ -1583,7 +1796,6 @@
       };
     });
 
-    // Speed Picker Triggers & Sheet
     $('playerSpeedBadgeBtn')?.addEventListener('click', openSpeedSheet);
     $('speedPillBtn')?.addEventListener('click', openSpeedSheet);
     $('quickSpeedCloseBtn')?.addEventListener('click', () => closeModal('quickSpeedModal'));
@@ -1595,7 +1807,6 @@
       };
     });
 
-    // Sleep Timer Triggers & Sheet
     $('playerTimerBadgeBtn')?.addEventListener('click', () => openModal('sleepTimerModal'));
     $('playerTimerPillBtn')?.addEventListener('click', () => openModal('sleepTimerModal'));
     $('sleepTimerBtn')?.addEventListener('click', () => openModal('sleepTimerModal'));
@@ -1611,7 +1822,6 @@
       };
     });
 
-    // Gallery, Jump, Bookmarks, Settings Triggers
     $('colorGalleryBtn')?.addEventListener('click', openColorGallery);
     $('colorGalleryCloseBtn')?.addEventListener('click', () => closeModal('colorGalleryModal'));
     $('colorGalleryBackdrop')?.addEventListener('click', () => closeModal('colorGalleryModal'));
@@ -1648,7 +1858,6 @@
     $('prevChapterBtnBottom')?.addEventListener('click', () => loadChapter(state.chapterIndex - 1, true));
     $('nextChapterBtnBottom')?.addEventListener('click', () => loadChapter(state.chapterIndex + 1, true));
 
-    // Player Playback Controls
     $('playerPlayPauseBtn')?.addEventListener('click', togglePlayPause);
     $('playerPrevParaBtn')?.addEventListener('click', () => {
       playParagraph(Math.max(0, state.paragraphIndex - 1));
@@ -1673,7 +1882,6 @@
       }
     });
 
-    // Timeline Seeking
     $('timelineBar')?.addEventListener('click', (e) => {
       const bar = $('timelineBar');
       if (!bar || !state.masterAudio || !state.masterAudio.duration) return;
@@ -1682,7 +1890,6 @@
       state.masterAudio.currentTime = pct * state.masterAudio.duration;
     });
 
-    // Volume Popover
     const volMuteBtn = $('volumeMuteBtn');
     const volPopover = $('volumePopover');
     const quickVolSlider = $('quickVolumeSlider');
@@ -1697,12 +1904,10 @@
     }
     if (quickVolSlider) {
       quickVolSlider.oninput = (e) => {
-        const val = Number(e.target.value);
-        setVolume(val);
+        setVolume(Number(e.target.value));
       };
     }
 
-    // Settings Sliders
     const rateInput = $('rate');
     if (rateInput) {
       rateInput.oninput = (e) => setRate(Number(e.target.value));
@@ -1782,6 +1987,7 @@
       radio.onchange = (e) => {
         state.engine = e.target.value;
         saveSettings({ engine: state.engine });
+        nextPlaybackGeneration();
         setStatusState('READY');
         updatePlayerStatusUI();
       };
@@ -1791,9 +1997,9 @@
       stopPlayback();
       const testText = 'Xin chào, đây là giọng đọc thử nghiệm của Thiên Sứ Nhà Bên.';
       if (state.engine === 'edge') {
-        playEdgeTTS(testText, -99, 9999);
+        playEdgeTTS(testText, -99, 9999, 9999);
       } else {
-        playWebSpeechTTS(testText, -99, 9999);
+        playWebSpeechTTS(testText, -99, 9999, 9999);
       }
     });
 
@@ -1816,6 +2022,7 @@
     });
 
     $('clearCacheBtn')?.addEventListener('click', async () => {
+      revokeAllManagedObjectUrls();
       state.preloadedUrls = {};
       state.audioPreloadPromises = {};
       await clearIndexedDBCache();
@@ -1832,9 +2039,11 @@
       };
       const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
+      const managedUrl = createManagedObjectUrl(blob, 'export_backup', 'export');
+      a.href = managedUrl;
       a.download = `otonari-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
+      setTimeout(() => revokeManagedObjectUrl(managedUrl), 1000);
       showToast('Đã xuất file sao lưu JSON');
     });
 
@@ -1999,11 +2208,9 @@
   }
 
   // ==========================================================================
-  // 16. APP BOOTSTRAP & SERVICE WORKER
+  // 20. BOOTSTRAP & QUALITY VERIFICATION EXPORTS
   // ==========================================================================
   async function initApp() {
-    console.info(`[Web Reader Pro] Initializing mobile-first app (${APP_BUILD})...`);
-    
     updateDynamicLayoutMeasurements();
     applyTheme(state.theme);
     applyTypography();
@@ -2037,13 +2244,13 @@
     updateCacheStatsUI();
     
     const volData = getActiveVolumeData();
-    const countInfo = getVolumeCountBreakdown(volData.id);
+    const stats = getBookStats(volData);
     
     if ($('appVolumeBadge')) $('appVolumeBadge').textContent = volData.id.toUpperCase();
     if ($('volumePickerLabel')) $('volumePickerLabel').textContent = volData.id === 'vol10' ? 'Tập 10' : 'Tập 9';
     if ($('volCardTitle')) $('volCardTitle').textContent = volData.title;
-    if ($('volCardSub')) $('volCardSub').textContent = countInfo.text;
-    if ($('chapterBadgeCount')) $('chapterBadgeCount').textContent = `(${countInfo.total})`;
+    if ($('volCardSub')) $('volCardSub').textContent = stats.text;
+    if ($('chapterBadgeCount')) $('chapterBadgeCount').textContent = `(${stats.total})`;
     if ($('volCardCover') && volData.cover) $('volCardCover').src = volData.cover;
     
     renderChapterList();
@@ -2054,18 +2261,31 @@
     
     await loadVoices();
 
-    // Register PWA Service Worker gracefully
     if ('serviceWorker' in navigator && isHttp) {
-      navigator.serviceWorker.register('./sw.js').catch(err => {
-        console.warn('PWA ServiceWorker register notice:', err.message);
-      });
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
     }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initApp);
-  } else {
-    initApp();
+  // Export for testing purposes if in Node environment
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      getParagraphKey,
+      getBookStats,
+      nextPlaybackGeneration,
+      nextChapterGeneration,
+      createManagedObjectUrl,
+      revokeManagedObjectUrl,
+      managedObjectUrls,
+      MAX_CACHE_BYTES
+    };
+  }
+
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+      initApp();
+    }
   }
 
 })();

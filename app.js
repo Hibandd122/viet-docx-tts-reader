@@ -1,7 +1,7 @@
 /**
  * ==========================================================================
- * WEB READER PRO · APPLICATION CORE (UX REFACTOR & MULTI-VOLUME TTS)
- * Senior Frontend Architecture · Multi-Engine TTS · Distraction-Free UX
+ * WEB READER PRO · APPLICATION CORE (MOBILE-FIRST LUXURY UX & TTS)
+ * Senior Frontend & Mobile UX Architecture · Multi-Engine TTS
  * ==========================================================================
  */
 
@@ -20,7 +20,7 @@
   const DB_NAME = 'WebReaderProAudioDB';
   const DB_STORE = 'audio_chunks';
   const DB_VERSION = 1;
-  const APP_BUILD = 'ux-pro-v2';
+  const APP_BUILD = 'ux-mobile-pro-v3';
 
   // Environment detection
   const isExtension = typeof chrome !== 'undefined' && Boolean(chrome.runtime?.id);
@@ -38,7 +38,7 @@
     try { return JSON.parse(localStorage.getItem(STORAGE_BOOKMARKS) || '[]'); } catch { return []; }
   })();
 
-  // IndexedDB Manager for Audio Cache
+  // IndexedDB Audio Cache
   let dbPromise = null;
   function getDB() {
     if (!dbPromise) {
@@ -149,8 +149,9 @@
     // Playback State
     isPlaying: false,
     isPaused: false,
-    isBuffering: false,
+    isLoadingAudio: false,
     token: 0,
+    wakeLock: null,
 
     // Audio & TTS Engine
     engine: savedSettings.engine || 'edge', // 'edge' | 'webspeech' | 'chrome-ext'
@@ -168,7 +169,7 @@
     // Reader UI Preferences
     theme: savedSettings.theme || 'deep-night',
     font: savedSettings.font || "'Be Vietnam Pro', sans-serif",
-    fontSize: Number(savedSettings.fontSize ?? 19),
+    fontSize: Number(savedSettings.fontSize ?? 18),
     lineHeight: Number(savedSettings.lineHeight ?? 1.85),
     pageWidth: Number(savedSettings.pageWidth ?? 840),
     textAlign: savedSettings.textAlign || 'left',
@@ -192,10 +193,9 @@
     masterAudio: new Audio(),
     preloadedUrls: {},
     audioPreloadPromises: {},
-    edgeServerFallback: {},
-    edgeRetryAttempts: {},
     saveProgressTimer: null,
-    lastScrollY: 0
+    lastScrollY: 0,
+    savedScrollBeforeLock: 0
   };
 
   // Safe initial chapter index
@@ -206,7 +206,34 @@
   );
 
   // ==========================================================================
-  // 1. PERSISTENCE & STORAGE (DEBOUNCED)
+  // 1. DYNAMIC MEASUREMENT & SAFE AREA
+  // ==========================================================================
+  function updateDynamicLayoutMeasurements() {
+    // Measure dynamic viewport height
+    const vh = window.innerHeight;
+    document.documentElement.style.setProperty('--app-height', `${vh}px`);
+
+    // Measure player actual rendered height
+    const player = $('audioPlayer');
+    if (player) {
+      const rect = player.getBoundingClientRect();
+      const pHeight = Math.round(rect.height) || 84;
+      document.documentElement.style.setProperty('--player-height', `${pHeight}px`);
+    }
+  }
+
+  function lockBodyScroll() {
+    state.savedScrollBeforeLock = window.scrollY;
+    document.body.classList.add('scroll-locked');
+  }
+
+  function unlockBodyScroll() {
+    document.body.classList.remove('scroll-locked');
+    window.scrollTo(0, state.savedScrollBeforeLock);
+  }
+
+  // ==========================================================================
+  // 2. PERSISTENCE & STORAGE (DEBOUNCED)
   // ==========================================================================
   function saveSettings(patch = {}) {
     Object.assign(state, patch);
@@ -256,9 +283,9 @@
   }
 
   // ==========================================================================
-  // 2. TOASTS, STATUS & BADGES
+  // 3. TOASTS, STATUS & BADGES
   // ==========================================================================
-  function showToast(message, duration = 2800) {
+  function showToast(message, duration = 2500) {
     const container = $('toastContainer');
     if (!container) return;
     const toast = document.createElement('div');
@@ -303,7 +330,7 @@
   }
 
   // ==========================================================================
-  // 3. THEME & TYPOGRAPHY APPLIERS
+  // 4. THEME & TYPOGRAPHY APPLIERS
   // ==========================================================================
   function applyTheme(themeName) {
     state.theme = themeName;
@@ -331,6 +358,19 @@
       swatch.style.background = colors[themeName] || '#818cf8';
     }
 
+    // Update theme-color meta for mobile browser chrome
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeMeta) {
+      const metaColors = {
+        'deep-night': '#070709',
+        'obsidian': '#0b1120',
+        'warm-paper': '#f8f4ec',
+        'sepia': '#f2ebd9',
+        'white': '#ffffff'
+      };
+      themeMeta.content = metaColors[themeName] || '#070709';
+    }
+
     $$('#settingsThemeSwatches .swatch-card').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.theme === themeName);
     });
@@ -351,7 +391,7 @@
   }
 
   // ==========================================================================
-  // 4. VOLUME SWITCHING & DATA BINDING
+  // 5. VOLUME SWITCHING & DATA BINDING
   // ==========================================================================
   function switchVolume(volId) {
     if (!window.VOLUMES || !window.VOLUMES[volId]) return;
@@ -398,7 +438,7 @@
   }
 
   // ==========================================================================
-  // 5. CHAPTER RENDERING & READING SPY
+  // 6. CHAPTER RENDERING & READING SPY
   // ==========================================================================
   function loadChapter(index, forceScrollTop = false) {
     const volData = getActiveVolumeData();
@@ -477,7 +517,7 @@
         }
         
         const bBtn = document.createElement('button');
-        bBtn.className = 'para-bookmark-btn';
+        bBtn.className = 'para-bookmark-btn mobile-touch-target';
         bBtn.innerHTML = '🔖';
         bBtn.title = 'Đánh dấu đoạn này';
         bBtn.setAttribute('aria-label', `Đánh dấu đoạn ${pIdx + 1}`);
@@ -536,11 +576,12 @@
       }, 150);
     }
     
+    updateMediaSessionMetadata();
     setStatusState('READY', 'Sẵn sàng đọc');
   }
 
   // ==========================================================================
-  // 6. REDESIGNED TTS PLAYBACK CONTROLLER
+  // 7. REDESIGNED TTS PLAYBACK CONTROLLER & SPAM PROTECTION
   // ==========================================================================
   async function playParagraph(pIdx) {
     const volData = getActiveVolumeData();
@@ -567,6 +608,7 @@
     state.paragraphIndex = pIdx;
     state.isPlaying = true;
     state.isPaused = false;
+    state.isLoadingAudio = true;
     
     pEls.forEach(el => el.classList.remove('reading-active'));
     const activeEl = $(`para-${pIdx}`);
@@ -579,7 +621,9 @@
     
     saveReadingProgress(state.chapterIndex, pIdx);
     updatePlayerStatusUI();
-    updatePlayPauseButtonUI(true);
+    updatePlayPauseButtonUI(true, true);
+    requestScreenWakeLock();
+    updateMediaSessionMetadata();
     setStatusState('PLAYING', `Đang đọc đoạn ${pIdx + 1}`);
     
     const textToRead = activeEl ? activeEl.textContent.replace(/🔖/g, '').trim() : '';
@@ -616,6 +660,7 @@
     if (state.preloadedUrls[pIdx]) {
       audio.src = state.preloadedUrls[pIdx];
       audio.play().catch(e => console.warn('Audio play error:', e));
+      updatePlayPauseButtonUI(true, false);
       setupAudioEvents(audio, pIdx, token);
       return;
     }
@@ -627,6 +672,7 @@
       state.preloadedUrls[pIdx] = blobUrl;
       audio.src = blobUrl;
       audio.play().catch(e => console.warn('Audio play cached error:', e));
+      updatePlayPauseButtonUI(true, false);
       setupAudioEvents(audio, pIdx, token);
       return;
     }
@@ -647,6 +693,7 @@
           console.warn('Audio play error, falling back to WebSpeech:', err);
           playWebSpeechTTS(text, pIdx, token);
         });
+        updatePlayPauseButtonUI(true, false);
         setupAudioEvents(audio, pIdx, token);
       })
       .catch(err => {
@@ -692,6 +739,10 @@
     utter.volume = state.isMuted ? 0 : state.volume;
     utter.lang = 'vi-VN';
     
+    utter.onstart = () => {
+      if (state.token !== token) return;
+      updatePlayPauseButtonUI(true, false);
+    };
     utter.onend = () => {
       if (state.token !== token) return;
       playParagraph(pIdx + 1);
@@ -751,7 +802,8 @@
       state.isPaused = true;
       if (state.masterAudio) state.masterAudio.pause();
       if ('speechSynthesis' in window) window.speechSynthesis.pause();
-      updatePlayPauseButtonUI(false);
+      updatePlayPauseButtonUI(false, false);
+      releaseScreenWakeLock();
       setStatusState('PAUSED', 'Tạm dừng đọc');
     } else if (state.isPaused) {
       state.isPaused = false;
@@ -760,7 +812,8 @@
       } else {
         playParagraph(state.paragraphIndex >= 0 ? state.paragraphIndex : 0);
       }
-      updatePlayPauseButtonUI(true);
+      updatePlayPauseButtonUI(true, false);
+      requestScreenWakeLock();
       setStatusState('PLAYING', `Đang đọc đoạn ${state.paragraphIndex + 1}`);
     } else {
       const targetPara = state.paragraphIndex >= 0 ? state.paragraphIndex : (state.progressMap[state.chapterIndex] ?? 0);
@@ -772,19 +825,23 @@
     state.token++;
     state.isPlaying = false;
     state.isPaused = false;
+    state.isLoadingAudio = false;
     stopCurrentAudio();
-    updatePlayPauseButtonUI(false);
+    updatePlayPauseButtonUI(false, false);
+    releaseScreenWakeLock();
     $$('#content p').forEach(el => el.classList.remove('reading-active'));
     setStatusState('READY', 'Sẵn sàng đọc');
   }
 
-  function updatePlayPauseButtonUI(isPlaying) {
+  function updatePlayPauseButtonUI(isPlaying, isLoading = false) {
     const playSvg = $('playIconSvg');
     const pauseSvg = $('pauseIconSvg');
+    const spinner = $('playerLoadingSpinner');
     const pulseDot = $('playerPulseDot');
     
-    if (playSvg) playSvg.hidden = isPlaying;
-    if (pauseSvg) pauseSvg.hidden = !isPlaying;
+    if (spinner) spinner.hidden = !isLoading;
+    if (playSvg) playSvg.hidden = isPlaying || isLoading;
+    if (pauseSvg) pauseSvg.hidden = !isPlaying || isLoading;
     if (pulseDot) pulseDot.classList.toggle('playing', isPlaying);
   }
 
@@ -812,16 +869,20 @@
     
     const speedBadge = $('playerSpeedBadge');
     if (speedBadge) speedBadge.textContent = `${state.rate.toFixed(2)}×`;
+    const speedPill = $('speedPillLabel');
+    if (speedPill) speedPill.textContent = `${state.rate.toFixed(2)}×`;
     
     const voiceBadge = $('playerVoiceBadge');
     if (voiceBadge) voiceBadge.textContent = state.voice.includes('NamMinh') ? 'Nam Minh' : 'Hoài My';
     
     const timerBadge = $('playerTimerBadge');
-    if (timerBadge) {
-      timerBadge.textContent = state.sleepTimer.mode !== 'off'
-        ? `🌙 ${formatTime(state.sleepTimer.remainingSeconds)}`
-        : '🌙 Tắt';
-    }
+    const timerPill = $('playerTimerLabel');
+    const formattedTimer = state.sleepTimer.mode !== 'off'
+      ? `${formatTime(state.sleepTimer.remainingSeconds)}`
+      : 'Tắt';
+    
+    if (timerBadge) timerBadge.textContent = `🌙 ${formattedTimer}`;
+    if (timerPill) timerPill.textContent = formattedTimer;
     
     const engineBadge = $('playerEngineBadge');
     if (engineBadge) {
@@ -835,6 +896,8 @@
     if (chProgBar && totalParas > 0) {
       chProgBar.style.width = `${(curP / totalParas) * 100}%`;
     }
+
+    updateDynamicLayoutMeasurements();
   }
 
   function formatTime(secs) {
@@ -845,7 +908,72 @@
   }
 
   // ==========================================================================
-  // 7. SIDEBAR, TOC & QUICK JUMP
+  // 8. MEDIA SESSION API & SCREEN WAKE LOCK
+  // ==========================================================================
+  function updateMediaSessionMetadata() {
+    if (!('mediaSession' in navigator)) return;
+    const volData = getActiveVolumeData();
+    const currentChapters = volData.chapters || [];
+    const chapter = currentChapters[state.chapterIndex];
+    if (!chapter) return;
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: chapter.title || `Chương ${state.chapterIndex + 1}`,
+        artist: 'Thiên Sứ Nhà Bên',
+        album: volData.title || 'Audiobook Tiếng Việt',
+        artwork: [
+          { src: volData.cover || 'images/cover.jpg', sizes: '512x512', type: 'image/jpeg' }
+        ]
+      });
+    } catch {}
+  }
+
+  function initMediaSessionActionHandlers() {
+    if (!('mediaSession' in navigator)) return;
+    const actions = [
+      ['play', () => togglePlayPause()],
+      ['pause', () => togglePlayPause()],
+      ['previoustrack', () => playParagraph(Math.max(0, state.paragraphIndex - 1))],
+      ['nexttrack', () => playParagraph(state.paragraphIndex + 1)],
+      ['seekbackward', () => {
+        if (state.masterAudio?.currentTime) state.masterAudio.currentTime = Math.max(0, state.masterAudio.currentTime - 5);
+      }],
+      ['seekforward', () => {
+        if (state.masterAudio?.currentTime) state.masterAudio.currentTime = Math.min(state.masterAudio.duration || 999, state.masterAudio.currentTime + 5);
+      }]
+    ];
+
+    actions.forEach(([action, handler]) => {
+      try { navigator.mediaSession.setActionHandler(action, handler); } catch {}
+    });
+  }
+
+  async function requestScreenWakeLock() {
+    if ('wakeLock' in navigator) {
+      try {
+        state.wakeLock = await navigator.wakeLock.request('screen');
+      } catch {}
+    }
+  }
+
+  function releaseScreenWakeLock() {
+    if (state.wakeLock) {
+      try {
+        state.wakeLock.release();
+        state.wakeLock = null;
+      } catch {}
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && state.isPlaying && !state.isPaused) {
+      requestScreenWakeLock();
+    }
+  });
+
+  // ==========================================================================
+  // 9. SIDEBAR, TOC & QUICK JUMP
   // ==========================================================================
   function renderChapterList() {
     const listEl = $('chapterList');
@@ -857,7 +985,7 @@
     
     chaptersList.forEach((ch, idx) => {
       const btn = document.createElement('button');
-      btn.className = `chapter-item-btn${idx === state.chapterIndex ? ' active' : ''}`;
+      btn.className = `chapter-item-btn mobile-touch-target${idx === state.chapterIndex ? ' active' : ''}`;
       btn.dataset.index = idx;
       
       const totalP = ch.blocks ? ch.blocks.filter(b => b.type === 'p').length : 0;
@@ -916,7 +1044,7 @@
     
     chaptersList.forEach((ch, idx) => {
       const chip = document.createElement('button');
-      chip.className = `chip-btn${idx === state.chapterIndex ? ' active' : ''}`;
+      chip.className = `chip-btn mobile-touch-target${idx === state.chapterIndex ? ' active' : ''}`;
       chip.textContent = `${idx + 1}`;
       chip.title = ch.title;
       chip.dataset.index = idx;
@@ -954,7 +1082,7 @@
   }
 
   // ==========================================================================
-  // 8. BOOKMARKS MANAGER
+  // 10. BOOKMARKS MANAGER
   // ==========================================================================
   function toggleBookmark(volId, chapIdx, pIdx, text) {
     const numPIdx = Number(pIdx);
@@ -1004,7 +1132,7 @@
     
     bookmarks.forEach((b, idx) => {
       const card = document.createElement('div');
-      card.className = 'bookmark-card';
+      card.className = 'bookmark-card mobile-touch-target';
       card.innerHTML = `
         <div class="bookmark-card-meta">
           <span>Tập ${b.volId === 'vol10' ? '10' : '9'} · Chương ${b.chapIdx + 1} · Đoạn ${b.pIdx + 1}</span>
@@ -1044,8 +1172,40 @@
   }
 
   // ==========================================================================
-  // 9. SLEEP TIMER ENGINE
+  // 11. QUICK SPEED SHEET & SLEEP TIMER
   // ==========================================================================
+  function openSpeedSheet() {
+    $$('.speed-opt-btn').forEach(btn => {
+      const s = Number(btn.dataset.speed);
+      btn.classList.toggle('active', Math.abs(s - state.rate) < 0.04);
+    });
+    openModal('quickSpeedModal');
+  }
+
+  function setRate(r) {
+    state.rate = Math.max(0.5, Math.min(2.5, r));
+    const rateInput = $('rate');
+    if (rateInput) rateInput.value = state.rate;
+    const rateVal = $('rateValue');
+    if (rateVal) rateVal.textContent = `${state.rate.toFixed(2)}×`;
+    const speedPill = $('speedPillLabel');
+    if (speedPill) speedPill.textContent = `${state.rate.toFixed(2)}×`;
+    const speedBadge = $('playerSpeedBadge');
+    if (speedBadge) speedBadge.textContent = `${state.rate.toFixed(2)}×`;
+    
+    $$('.slider-ticks span').forEach(span => {
+      span.classList.toggle('active', Math.abs(Number(span.dataset.val) - state.rate) < 0.05);
+    });
+    
+    $$('.speed-opt-btn').forEach(btn => {
+      btn.classList.toggle('active', Math.abs(Number(btn.dataset.speed) - state.rate) < 0.04);
+    });
+    
+    if (state.masterAudio) state.masterAudio.playbackRate = state.rate;
+    saveSettings({ rate: state.rate });
+    updatePlayerStatusUI();
+  }
+
   function setSleepTimer(minutes) {
     clearInterval(state.sleepTimer.intervalId);
     
@@ -1122,7 +1282,7 @@
   }
 
   // ==========================================================================
-  // 10. MODALS & LIGHTBOX
+  // 12. MODALS, LIGHTBOX & BOTTOM SHEETS
   // ==========================================================================
   function openLightbox(src, caption = '') {
     const modal = $('lightboxModal');
@@ -1131,12 +1291,14 @@
     if (!modal || !img) return;
     img.src = src;
     if (cap) cap.textContent = caption;
+    lockBodyScroll();
     modal.removeAttribute('hidden');
   }
 
   function closeLightbox() {
     const modal = $('lightboxModal');
     if (modal) modal.setAttribute('hidden', '');
+    unlockBodyScroll();
   }
 
   function openColorGallery() {
@@ -1165,7 +1327,7 @@
       grid.appendChild(item);
     });
     
-    modal.removeAttribute('hidden');
+    openModal('colorGalleryModal');
   }
 
   function openQuickJumpModal() {
@@ -1179,7 +1341,7 @@
     
     chaptersList.forEach((ch, idx) => {
       const item = document.createElement('button');
-      item.className = `quick-jump-item${idx === state.chapterIndex ? ' active' : ''}`;
+      item.className = `quick-jump-item mobile-touch-target${idx === state.chapterIndex ? ' active' : ''}`;
       item.innerHTML = `
         <div class="chapter-item-header">
           <span>Phần ${(idx + 1).toString().padStart(2, '0')}</span>
@@ -1194,17 +1356,23 @@
       grid.appendChild(item);
     });
     
-    modal.removeAttribute('hidden');
+    openModal('quickJumpModal');
   }
 
   function openModal(modalId) {
     const modal = $(modalId);
-    if (modal) modal.removeAttribute('hidden');
+    if (modal) {
+      modal.removeAttribute('hidden');
+      lockBodyScroll();
+    }
   }
 
   function closeModal(modalId) {
     const modal = $(modalId);
-    if (modal) modal.setAttribute('hidden', '');
+    if (modal) {
+      modal.setAttribute('hidden', '');
+      unlockBodyScroll();
+    }
   }
 
   function showConfirmDialog(title, message, onConfirm) {
@@ -1218,10 +1386,10 @@
     if (titleEl) titleEl.textContent = title;
     if (msgEl) msgEl.textContent = message;
     
-    modal.removeAttribute('hidden');
+    openModal('confirmModal');
     
     const cleanup = () => {
-      modal.setAttribute('hidden', '');
+      closeModal('confirmModal');
       okBtn.onclick = null;
       cancelBtn.onclick = null;
     };
@@ -1234,7 +1402,7 @@
   }
 
   // ==========================================================================
-  // 11. SIDEBAR & ZEN FOCUS MODE
+  // 13. SIDEBAR & ZEN FOCUS MODE
   // ==========================================================================
   function toggleSidebar() {
     const sidebar = $('sidebar');
@@ -1244,6 +1412,8 @@
     if (window.innerWidth <= 900) {
       const isOpen = sidebar.classList.toggle('open');
       if (backdrop) backdrop.hidden = !isOpen;
+      if (isOpen) lockBodyScroll();
+      else unlockBodyScroll();
     } else {
       state.isSidebarOpen = !state.isSidebarOpen;
       sidebar.style.display = state.isSidebarOpen ? 'flex' : 'none';
@@ -1255,6 +1425,7 @@
     const backdrop = $('sidebarBackdrop');
     if (sidebar) sidebar.classList.remove('open');
     if (backdrop) backdrop.hidden = true;
+    unlockBodyScroll();
   }
 
   function toggleZenMode() {
@@ -1264,7 +1435,7 @@
   }
 
   // ==========================================================================
-  // 12. VOICES LOADER & INITIALIZER
+  // 14. VOICES LOADER & INITIALIZER
   // ==========================================================================
   async function loadVoices() {
     const select = $('voiceSelect');
@@ -1321,7 +1492,7 @@
   }
 
   // ==========================================================================
-  // 13. EVENT LISTENERS & WIRING
+  // 15. EVENT LISTENERS & WIRING
   // ==========================================================================
   function initEventListeners() {
     $('sidebarToggleBtn')?.addEventListener('click', toggleSidebar);
@@ -1329,6 +1500,7 @@
     $('sidebarBackdrop')?.addEventListener('click', closeSidebar);
     $('zenModeBtn')?.addEventListener('click', toggleZenMode);
     
+    // Auto-collapse header on scroll
     const readerArea = $('readerArea');
     if (readerArea) {
       readerArea.addEventListener('scroll', () => {
@@ -1336,15 +1508,16 @@
         const topbar = $('topbar');
         if (!topbar) return;
         
-        if (curY > 60 && curY > state.lastScrollY + 15) {
+        if (curY > 50 && curY > state.lastScrollY + 12) {
           topbar.classList.add('topbar-hidden');
-        } else if (curY < state.lastScrollY - 10 || curY <= 30) {
+        } else if (curY < state.lastScrollY - 8 || curY <= 25) {
           topbar.classList.remove('topbar-hidden');
         }
         state.lastScrollY = curY;
       }, { passive: true });
     }
     
+    // Volume Picker Dropdown
     const volPickerBtn = $('volumePickerBtn');
     const volDropdown = $('volumeDropdownMenu');
     if (volPickerBtn && volDropdown) {
@@ -1362,6 +1535,7 @@
       });
     }
 
+    // Theme Picker Dropdown & Settings Swatches
     const themeBtn = $('themePickerBtn');
     const themeMenu = $('themeDropdownMenu');
     if (themeBtn && themeMenu) {
@@ -1393,6 +1567,7 @@
       $('volumePopover')?.setAttribute('hidden', '');
     });
 
+    // Sidebar Tabs
     $$('.tab-btn').forEach(btn => {
       btn.onclick = () => {
         $$('.tab-btn').forEach(b => {
@@ -1408,16 +1583,22 @@
       };
     });
 
-    $('colorGalleryBtn')?.addEventListener('click', openColorGallery);
-    $('colorGalleryCloseBtn')?.addEventListener('click', () => closeModal('colorGalleryModal'));
-    $('colorGalleryBackdrop')?.addEventListener('click', () => closeModal('colorGalleryModal'));
+    // Speed Picker Triggers & Sheet
+    $('playerSpeedBadgeBtn')?.addEventListener('click', openSpeedSheet);
+    $('speedPillBtn')?.addEventListener('click', openSpeedSheet);
+    $('quickSpeedCloseBtn')?.addEventListener('click', () => closeModal('quickSpeedModal'));
+    $('quickSpeedBackdrop')?.addEventListener('click', () => closeModal('quickSpeedModal'));
+    $$('.speed-opt-btn').forEach(btn => {
+      btn.onclick = () => {
+        setRate(Number(btn.dataset.speed));
+        closeModal('quickSpeedModal');
+      };
+    });
 
-    $('quickChapterModalBtn')?.addEventListener('click', openQuickJumpModal);
-    $('quickJumpCloseBtn')?.addEventListener('click', () => closeModal('quickJumpModal'));
-    $('quickJumpBackdrop')?.addEventListener('click', () => closeModal('quickJumpModal'));
-
-    $('sleepTimerBtn')?.addEventListener('click', () => openModal('sleepTimerModal'));
+    // Sleep Timer Triggers & Sheet
+    $('playerTimerBadgeBtn')?.addEventListener('click', () => openModal('sleepTimerModal'));
     $('playerTimerPillBtn')?.addEventListener('click', () => openModal('sleepTimerModal'));
+    $('sleepTimerBtn')?.addEventListener('click', () => openModal('sleepTimerModal'));
     $('sleepTimerCloseBtn')?.addEventListener('click', () => closeModal('sleepTimerModal'));
     $('sleepTimerBackdrop')?.addEventListener('click', () => closeModal('sleepTimerModal'));
     $('extendTimerBtn')?.addEventListener('click', () => extendSleepTimer(10));
@@ -1429,6 +1610,15 @@
         closeModal('sleepTimerModal');
       };
     });
+
+    // Gallery, Jump, Bookmarks, Settings Triggers
+    $('colorGalleryBtn')?.addEventListener('click', openColorGallery);
+    $('colorGalleryCloseBtn')?.addEventListener('click', () => closeModal('colorGalleryModal'));
+    $('colorGalleryBackdrop')?.addEventListener('click', () => closeModal('colorGalleryModal'));
+
+    $('quickChapterModalBtn')?.addEventListener('click', openQuickJumpModal);
+    $('quickJumpCloseBtn')?.addEventListener('click', () => closeModal('quickJumpModal'));
+    $('quickJumpBackdrop')?.addEventListener('click', () => closeModal('quickJumpModal'));
 
     $('bookmarksBtn')?.addEventListener('click', () => {
       if (window.innerWidth <= 900) toggleSidebar();
@@ -1458,6 +1648,7 @@
     $('prevChapterBtnBottom')?.addEventListener('click', () => loadChapter(state.chapterIndex - 1, true));
     $('nextChapterBtnBottom')?.addEventListener('click', () => loadChapter(state.chapterIndex + 1, true));
 
+    // Player Playback Controls
     $('playerPlayPauseBtn')?.addEventListener('click', togglePlayPause);
     $('playerPrevParaBtn')?.addEventListener('click', () => {
       playParagraph(Math.max(0, state.paragraphIndex - 1));
@@ -1482,6 +1673,7 @@
       }
     });
 
+    // Timeline Seeking
     $('timelineBar')?.addEventListener('click', (e) => {
       const bar = $('timelineBar');
       if (!bar || !state.masterAudio || !state.masterAudio.duration) return;
@@ -1490,13 +1682,7 @@
       state.masterAudio.currentTime = pct * state.masterAudio.duration;
     });
 
-    $('speedPillBtn')?.addEventListener('click', () => {
-      const speeds = [0.8, 1.0, 1.25, 1.5, 1.75, 2.0];
-      const curIdx = speeds.findIndex(s => Math.abs(s - state.rate) < 0.05);
-      const nextRate = speeds[(curIdx + 1) % speeds.length];
-      setRate(nextRate);
-    });
-
+    // Volume Popover
     const volMuteBtn = $('volumeMuteBtn');
     const volPopover = $('volumePopover');
     const quickVolSlider = $('quickVolumeSlider');
@@ -1516,6 +1702,7 @@
       };
     }
 
+    // Settings Sliders
     const rateInput = $('rate');
     if (rateInput) {
       rateInput.oninput = (e) => setRate(Number(e.target.value));
@@ -1771,6 +1958,7 @@
         if (!$('lightboxModal')?.hasAttribute('hidden')) closeLightbox();
         else if (!$('confirmModal')?.hasAttribute('hidden')) closeModal('confirmModal');
         else if (!$('shortcutsModal')?.hasAttribute('hidden')) closeModal('shortcutsModal');
+        else if (!$('quickSpeedModal')?.hasAttribute('hidden')) closeModal('quickSpeedModal');
         else if (!$('quickJumpModal')?.hasAttribute('hidden')) closeModal('quickJumpModal');
         else if (!$('colorGalleryModal')?.hasAttribute('hidden')) closeModal('colorGalleryModal');
         else if (!$('sleepTimerModal')?.hasAttribute('hidden')) closeModal('sleepTimerModal');
@@ -1779,24 +1967,11 @@
         else stopPlayback();
       }
     });
-  }
 
-  function setRate(r) {
-    state.rate = Math.max(0.5, Math.min(2.5, r));
-    const rateInput = $('rate');
-    if (rateInput) rateInput.value = state.rate;
-    const rateVal = $('rateValue');
-    if (rateVal) rateVal.textContent = `${state.rate.toFixed(2)}×`;
-    const speedPill = $('speedPillLabel');
-    if (speedPill) speedPill.textContent = `${state.rate.toFixed(2)}×`;
-    
-    $$('.slider-ticks span').forEach(span => {
-      span.classList.toggle('active', Math.abs(Number(span.dataset.val) - state.rate) < 0.05);
+    window.addEventListener('resize', updateDynamicLayoutMeasurements);
+    window.addEventListener('orientationchange', () => {
+      setTimeout(updateDynamicLayoutMeasurements, 150);
     });
-    
-    if (state.masterAudio) state.masterAudio.playbackRate = state.rate;
-    saveSettings({ rate: state.rate });
-    updatePlayerStatusUI();
   }
 
   function setVolume(v) {
@@ -1824,11 +1999,12 @@
   }
 
   // ==========================================================================
-  // 14. APP BOOTSTRAP & SERVICE WORKER
+  // 16. APP BOOTSTRAP & SERVICE WORKER
   // ==========================================================================
   async function initApp() {
-    console.info(`[Web Reader Pro] Initializing app (${APP_BUILD})...`);
+    console.info(`[Web Reader Pro] Initializing mobile-first app (${APP_BUILD})...`);
     
+    updateDynamicLayoutMeasurements();
     applyTheme(state.theme);
     applyTypography();
     
@@ -1855,6 +2031,7 @@
     });
 
     initEventListeners();
+    initMediaSessionActionHandlers();
     renderBookmarksList();
     updateBookmarkBadge();
     updateCacheStatsUI();

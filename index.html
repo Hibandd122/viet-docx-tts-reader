@@ -2,12 +2,15 @@
 <html lang="vi" data-theme="deep-night">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=yes">
   <meta name="theme-color" content="#070709">
-  <meta name="description" content="Trình đọc tiểu thuyết Vol 9 & Vol 10 Tiếng Việt cao cấp với giọng đọc AI Microsoft Edge Neural chân thực, giao diện tinh giản hiện đại.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Thiên Sứ Reader">
+  <meta name="description" content="Trình đọc tiểu thuyết Vol 9 & Vol 10 Tiếng Việt cao cấp với giọng đọc AI Microsoft Edge Neural chân thực, tối ưu cho điện thoại và máy tính.">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" type="image/png" href="favicon.png">
-  <link rel="shortcut icon" href="favicon.ico">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="apple-touch-icon" href="assets/favicon.svg">
   <title>Thiên Sứ Nhà Bên · Trình Đọc Tiếng Việt Pro</title>
   
   <!-- Google Fonts: Be Vietnam Pro, Literata, Lora, Merriweather, Montserrat -->
@@ -23,13 +26,13 @@
     <div id="globalProgressFill" class="global-progress-fill"></div>
   </div>
 
-  <!-- Top Header Navigation Bar (Auto-collapsible on scroll down) -->
+  <!-- Top Header Navigation Bar (Auto-collapsible on mobile scroll down) -->
   <header class="topbar" id="topbar">
     <div class="topbar-brand">
-      <button id="sidebarToggleBtn" class="icon-btn" aria-label="Đóng/Mở Mục lục" title="Mục lục (M)">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+      <button id="sidebarToggleBtn" class="icon-btn mobile-touch-target" aria-label="Đóng/Mở Mục lục" title="Mục lục (M)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
       </button>
-      <div class="brand-text">
+      <div class="brand-text" id="brandTextWrap">
         <div class="brand-eyebrow">
           <span class="badge-pro">PRO</span>
           <span id="appVolumeBadge" class="badge-vol">TẬP 10</span>
@@ -38,7 +41,7 @@
       </div>
     </div>
 
-    <!-- Live Status / Engine Indicator -->
+    <!-- Live Status / Engine Indicator (Desktop & Tablet) -->
     <div class="topbar-center">
       <div id="engineStatusBadge" class="engine-badge" role="status" title="Nhấp để xem tùy chỉnh giọng đọc">
         <span class="status-dot"></span>
@@ -51,7 +54,7 @@
     <div class="topbar-actions">
       <!-- Volume Switcher Dropdown -->
       <div class="volume-dropdown-wrap">
-        <button id="volumePickerBtn" class="topbar-btn volume-btn" aria-label="Chọn Tập" title="Chuyển đổi Tập truyện" aria-expanded="false" aria-haspopup="true">
+        <button id="volumePickerBtn" class="topbar-btn volume-btn mobile-touch-target" aria-label="Chọn Tập" title="Chuyển đổi Tập truyện" aria-expanded="false" aria-haspopup="true">
           <span class="vol-icon">📚</span>
           <span id="volumePickerLabel" class="btn-label font-bold">Tập 10</span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
@@ -74,254 +77,266 @@
       </div>
 
       <!-- Quick Search Trigger -->
-      <button id="quickSearchBtn" class="topbar-btn" aria-label="Tìm kiếm chương" title="Tìm chương (Ctrl+K hoặc /)">
+      <button id="quickSearchBtn" class="topbar-btn mobile-touch-target" aria-label="Tìm kiếm chương" title="Tìm chương (Ctrl+K hoặc /)">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
         <span class="btn-label">Tìm</span>
       </button>
 
       <!-- Sleep Timer Button -->
-      <button id="sleepTimerBtn" class="topbar-btn" aria-label="Hẹn giờ tắt" title="Hẹn giờ tắt">
+      <button id="sleepTimerBtn" class="topbar-btn mobile-touch-target" aria-label="Hẹn giờ tắt" title="Hẹn giờ tắt">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
         <span id="sleepTimerLabel" class="btn-label">Hẹn giờ</span>
       </button>
 
       <!-- Bookmark Drawer Toggle -->
-      <button id="bookmarksBtn" class="topbar-btn" aria-label="Danh sách đánh dấu" title="Đánh dấu trang (B)">
+      <button id="bookmarksBtn" class="topbar-btn mobile-touch-target" aria-label="Danh sách đánh dấu" title="Đánh dấu trang (B)">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
         <span id="bookmarkCountBadge" class="badge-count">0</span>
       </button>
 
       <!-- Focus Mode Button -->
-      <button id="zenModeBtn" class="topbar-btn" aria-label="Chế độ tập trung" title="Chế độ tập trung (F)">
+      <button id="zenModeBtn" class="topbar-btn mobile-touch-target" aria-label="Chế độ tập trung" title="Chế độ tập trung (F)">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
         <span class="btn-label">Focus</span>
       </button>
 
       <!-- Theme Switcher Button -->
       <div class="theme-dropdown-wrap">
-        <button id="themePickerBtn" class="topbar-btn theme-btn" aria-label="Đổi giao diện" title="Chọn giao diện" aria-expanded="false" aria-haspopup="true">
-          <span class="theme-swatch current-theme-swatch"></span>
+        <button id="themePickerBtn" class="topbar-btn theme-btn mobile-touch-target" aria-label="Đổi màu nền giao diện" title="Đổi màu nền" aria-expanded="false" aria-haspopup="true">
+          <span class="current-theme-swatch"></span>
           <span id="themeNameLabel" class="btn-label">Đêm OLED</span>
         </button>
         <div id="themeDropdownMenu" class="theme-dropdown-menu" hidden>
-          <button class="theme-opt" data-theme="deep-night"><span class="swatch deep-night"></span> Đêm OLED</button>
-          <button class="theme-opt" data-theme="obsidian"><span class="swatch obsidian"></span> Xám Than (Obsidian)</button>
-          <button class="theme-opt" data-theme="warm-paper"><span class="swatch warm-paper"></span> Giấy Ấm (Book)</button>
-          <button class="theme-opt" data-theme="sepia"><span class="swatch sepia"></span> Sepia Cổ Điển</button>
-          <button class="theme-opt" data-theme="white"><span class="swatch white"></span> Trắng Sáng (Clean)</button>
+          <button class="theme-opt" data-theme="deep-night">
+            <span class="swatch deep-night"></span>
+            <span>Đêm OLED (Pure Black)</span>
+          </button>
+          <button class="theme-opt" data-theme="obsidian">
+            <span class="swatch obsidian"></span>
+            <span>Obsidian (Slate Dark)</span>
+          </button>
+          <button class="theme-opt" data-theme="warm-paper">
+            <span class="swatch warm-paper"></span>
+            <span>Giấy Ấm (Cozy Cream)</span>
+          </button>
+          <button class="theme-opt" data-theme="sepia">
+            <span class="swatch sepia"></span>
+            <span>Sepia (Antique Amber)</span>
+          </button>
+          <button class="theme-opt" data-theme="white">
+            <span class="swatch white"></span>
+            <span>Trắng Sáng (Clean Bright)</span>
+          </button>
         </div>
       </div>
 
-      <!-- Settings Button -->
-      <button id="settingsToggleBtn" class="topbar-btn highlight-btn" aria-label="Tùy chỉnh đọc & giọng đọc" title="Tùy chỉnh (T)">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-        <span class="btn-label">Cài đặt</span>
+      <!-- Settings Panel Toggle Button -->
+      <button id="settingsToggleBtn" class="icon-btn highlight-btn mobile-touch-target" aria-label="Mở Cài đặt" title="Cài đặt (T)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
       </button>
     </div>
   </header>
 
-  <!-- Mobile Sidebar Backdrop -->
+  <!-- Sidebar Backdrop (Mobile Drawer Overlay) -->
   <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
 
-  <!-- Main App Layout -->
+  <!-- Main Container Layout -->
   <div class="layout" id="mainLayout">
-    <!-- Sidebar / Navigation Drawer -->
-    <aside class="sidebar" id="sidebar">
+    <!-- Sidebar / Drawer / Mobile Bottom Sheet for TOC, Bookmarks, Settings -->
+    <aside class="sidebar" id="sidebar" aria-label="Thanh điều hướng và mục lục">
+      <!-- Mobile Drawer Drag Handle & Header -->
       <div class="sidebar-mobile-header">
-        <span class="sidebar-mobile-title">Mục Lục & Cài Đặt</span>
-        <button id="sidebarCloseBtn" class="icon-btn sidebar-close-btn" aria-label="Đóng bảng">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
+        <div class="sheet-drag-indicator"></div>
+        <div class="mobile-header-row">
+          <span class="sidebar-mobile-title" id="sidebarMobileTitle">Mục lục & Tùy chọn</span>
+          <button id="sidebarCloseBtn" class="icon-btn mobile-touch-target" aria-label="Đóng bảng điều hướng">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
       </div>
 
-      <div class="sidebar-tabs" role="tablist">
-        <button id="tabChaptersBtn" class="tab-btn active" data-tab="chapters" role="tab" aria-selected="true" aria-controls="tabContentChapters">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-          Mục lục <span id="chapterBadgeCount" class="tab-badge">...</span>
+      <!-- Navigation Tabs -->
+      <nav class="sidebar-tabs" role="tablist">
+        <button id="tabChaptersBtn" class="tab-btn active mobile-touch-target" data-tab="chapters" role="tab" aria-selected="true" aria-controls="tabContentChapters">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          <span>Mục lục</span>
+          <span id="chapterBadgeCount" class="tab-badge">(12)</span>
         </button>
-        <button id="tabBookmarksBtn" class="tab-btn" data-tab="bookmarks" role="tab" aria-selected="false" aria-controls="tabContentBookmarks">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
-          Đánh dấu
+        <button id="tabBookmarksBtn" class="tab-btn mobile-touch-target" data-tab="bookmarks" role="tab" aria-selected="false" aria-controls="tabContentBookmarks">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+          <span>Đánh dấu</span>
         </button>
-        <button id="tabSettingsBtn" class="tab-btn" data-tab="settings" role="tab" aria-selected="false" aria-controls="tabContentSettings">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          Cài đặt
+        <button id="tabSettingsBtn" class="tab-btn mobile-touch-target" data-tab="settings" role="tab" aria-selected="false" aria-controls="tabContentSettings">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span>Cài đặt</span>
         </button>
-      </div>
+      </nav>
 
-      <!-- Tab 1: Chapters Content -->
+      <!-- TAB 1: CHAPTERS & TOC -->
       <div id="tabContentChapters" class="tab-pane active" role="tabpanel">
-        <!-- Volume Info & Color Gallery Card -->
+        <!-- Active Volume Info Banner -->
         <div class="volume-info-card">
           <div class="vol-card-thumb">
-            <img id="volCardCover" src="assets/vol10/image_p002_1.jpeg" alt="Bìa sách" loading="lazy">
+            <img id="volCardCover" src="images/cover.jpg" alt="Bìa tập truyện" loading="lazy">
           </div>
           <div class="vol-card-details">
-            <h2 id="volCardTitle" class="vol-card-title">Tập 10: Giáng Sinh & Valentine</h2>
-            <span id="volCardSub" class="vol-card-sub">10 chương · 6 ngoại truyện · 1 lời bạt</span>
-            <button id="colorGalleryBtn" class="color-gallery-btn" title="Xem bộ sưu tập tranh màu đầu sách">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-              <span>Tranh màu đầu sách (4)</span>
+            <h2 class="vol-card-title" id="volCardTitle">Tập 10: Giáng Sinh & Valentine</h2>
+            <p class="vol-card-sub" id="volCardSub">10 Chương + 6 Ngoại truyện + Lời bạt</p>
+            <button id="colorGalleryBtn" class="color-gallery-btn mobile-touch-target" type="button">
+              <span>🎨 Tranh Màu Đầu Sách</span>
             </button>
           </div>
         </div>
 
+        <!-- Search Box -->
         <div class="search-box">
-          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input id="chapterSearch" class="search-input" type="search" placeholder="Tìm tên chương hoặc phần…" autocomplete="off" spellcheck="false" aria-label="Tìm kiếm chương">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" id="chapterSearch" class="search-input" placeholder="Tìm chương, tiêu đề…" autocomplete="off">
           <button id="searchClearBtn" class="search-clear-btn" aria-label="Xóa tìm kiếm" hidden>&times;</button>
         </div>
-        
+
+        <!-- Overall Book Progress -->
         <div class="overall-progress-card">
           <div class="progress-info">
-            <span class="progress-label">Tiến độ toàn bộ sách</span>
+            <span>Tiến độ đọc toàn tập</span>
             <span id="overallProgressPercent" class="progress-val">0%</span>
           </div>
-          <div class="progress-track"><div id="overallProgressBar" class="progress-fill" style="width: 0%"></div></div>
+          <div class="progress-track">
+            <div id="overallProgressBar" class="progress-fill"></div>
+          </div>
         </div>
 
-        <nav id="chapterList" class="chapter-list" aria-label="Danh sách chương"></nav>
-        <div id="chapterEmpty" class="empty-notice" hidden>Không tìm thấy chương nào phù hợp.</div>
+        <!-- Chapter Items List -->
+        <div id="chapterList" class="chapter-list" role="list"></div>
+        <div id="chapterEmpty" class="empty-notice" hidden>Không tìm thấy chương phù hợp.</div>
       </div>
 
-      <!-- Tab 2: Bookmarks Content -->
-      <div id="tabContentBookmarks" class="tab-pane" hidden role="tabpanel">
+      <!-- TAB 2: BOOKMARKS -->
+      <div id="tabContentBookmarks" class="tab-pane" role="tabpanel" hidden>
         <div class="bookmarks-header">
-          <span class="bookmarks-title">Đoạn đã đánh dấu</span>
-          <button id="clearAllBookmarksBtn" class="text-btn danger-text">Xóa tất cả</button>
+          <h3 class="bookmarks-title">Đoạn Đã Đánh Dấu</h3>
+          <button id="clearAllBookmarksBtn" class="text-btn danger-text mobile-touch-target" type="button">Xóa tất cả</button>
         </div>
-        <div id="bookmarkList" class="bookmark-list"></div>
+        <div id="bookmarkList" class="bookmark-list" role="list"></div>
         <div id="bookmarkEmpty" class="empty-notice">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
-          <p>Chưa có đoạn nào được đánh dấu.<br><small>Nhấp biểu tượng 🔖 bên cạnh mỗi đoạn để lưu lại.</small></p>
+          <p>Chưa có đoạn nào được đánh dấu.</p>
+          <small>Bấm biểu tượng 🔖 cạnh mỗi đoạn văn để lưu lại vị trí yêu thích.</small>
         </div>
       </div>
 
-      <!-- Tab 3: Settings Content (3-Tier Architecture) -->
-      <div id="tabContentSettings" class="tab-pane" hidden role="tabpanel">
-        
-        <!-- TẦNG A: CƠ BẢN (MỞ MẶC ĐỊNH) -->
-        <section class="settings-tier-basic">
-          <div class="settings-group">
-            <div class="settings-header">
-              <h3>Cài Đặt Cơ Bản</h3>
+      <!-- TAB 3: SETTINGS (3-TIER ARCHITECTURE) -->
+      <div id="tabContentSettings" class="tab-pane" role="tabpanel" hidden>
+        <!-- TIER 1: BASIC SETTINGS (ALWAYS VISIBLE) -->
+        <section class="settings-group" aria-labelledby="headingBasicSettings">
+          <div class="settings-header">
+            <h3 id="headingBasicSettings">Cài Đặt Cơ Bản</h3>
+          </div>
+
+          <!-- Voice Selector -->
+          <div class="setting-field">
+            <label for="voiceSelect">Giọng đọc Tiếng Việt</label>
+            <div class="input-action-row">
+              <select id="voiceSelect" class="form-select flex-1"></select>
+              <button id="voiceTestBtn" class="btn btn-secondary mobile-touch-target" title="Nghe thử giọng">
+                <span>🔊 Nghe thử</span>
+              </button>
             </div>
+          </div>
 
-            <!-- Voice Selection -->
-            <div class="setting-field">
-              <label for="voiceSelect">Giọng đọc</label>
-              <select id="voiceSelect" class="form-select">
-                <option value="">Đang tải danh sách giọng…</option>
-              </select>
+          <!-- Reading Rate Slider -->
+          <div class="setting-slider">
+            <div class="slider-header">
+              <label for="rate">Tốc độ đọc</label>
+              <output id="rateValue" for="rate">1.00×</output>
             </div>
-
-            <button id="voiceTestBtn" class="btn btn-secondary w-full" type="button">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-              <span>Phát thử giọng đọc</span>
-            </button>
-
-            <!-- Speed Slider -->
-            <div class="setting-slider mt-3">
-              <div class="slider-header">
-                <span>Tốc độ đọc</span>
-                <output id="rateValue">1.00×</output>
-              </div>
-              <input id="rate" type="range" min="0.5" max="2.0" step="0.05" value="1.0" aria-label="Tốc độ đọc">
-              <div class="slider-ticks">
-                <span data-val="0.8">0.8×</span>
-                <span data-val="1.0" class="active">1.0×</span>
-                <span data-val="1.25">1.25×</span>
-                <span data-val="1.5">1.5×</span>
-              </div>
+            <input type="range" id="rate" min="0.5" max="2.5" step="0.05" value="1.0">
+            <div class="slider-ticks">
+              <span data-val="0.8">0.8×</span>
+              <span data-val="1.0" class="active">1.0×</span>
+              <span data-val="1.25">1.25×</span>
+              <span data-val="1.5">1.5×</span>
+              <span data-val="2.0">2.0×</span>
             </div>
+          </div>
 
-            <!-- Font Size Slider -->
-            <div class="setting-slider">
-              <div class="slider-header">
-                <span>Cỡ chữ</span>
-                <output id="fontSizeValue">19px</output>
-              </div>
-              <input id="fontSize" type="range" min="15" max="32" value="19" aria-label="Cỡ chữ">
+          <!-- Font Size Slider -->
+          <div class="setting-slider">
+            <div class="slider-header">
+              <label for="fontSize">Cỡ chữ văn bản</label>
+              <output id="fontSizeValue" for="fontSize">19px</output>
             </div>
+            <input type="range" id="fontSize" min="14" max="32" step="1" value="19">
+          </div>
 
-            <!-- Theme Swatches in Settings -->
-            <div class="setting-field">
-              <label>Giao diện</label>
-              <div class="theme-swatches-grid" id="settingsThemeSwatches">
-                <button type="button" class="swatch-card active" data-theme="deep-night" title="Đêm OLED">
-                  <span class="swatch-circle deep-night"></span>
-                  <span class="swatch-label">Đêm OLED</span>
-                </button>
-                <button type="button" class="swatch-card" data-theme="obsidian" title="Xám Than">
-                  <span class="swatch-circle obsidian"></span>
-                  <span class="swatch-label">Obsidian</span>
-                </button>
-                <button type="button" class="swatch-card" data-theme="warm-paper" title="Giấy Ấm">
-                  <span class="swatch-circle warm-paper"></span>
-                  <span class="swatch-label">Giấy Ấm</span>
-                </button>
-                <button type="button" class="swatch-card" data-theme="sepia" title="Sepia Cổ Điển">
-                  <span class="swatch-circle sepia"></span>
-                  <span class="swatch-label">Sepia</span>
-                </button>
-                <button type="button" class="swatch-card" data-theme="white" title="Trắng Sáng">
-                  <span class="swatch-circle white"></span>
-                  <span class="swatch-label">Trắng Sáng</span>
-                </button>
-              </div>
+          <!-- Theme Color Swatches -->
+          <div class="setting-field">
+            <label>Màu nền & Giao diện</label>
+            <div class="theme-swatches-grid" id="settingsThemeSwatches">
+              <button class="swatch-card active mobile-touch-target" data-theme="deep-night" type="button">
+                <span class="swatch-circle deep-night"></span>
+                <span class="swatch-label">Đêm OLED</span>
+              </button>
+              <button class="swatch-card mobile-touch-target" data-theme="obsidian" type="button">
+                <span class="swatch-circle obsidian"></span>
+                <span class="swatch-label">Obsidian</span>
+              </button>
+              <button class="swatch-card mobile-touch-target" data-theme="warm-paper" type="button">
+                <span class="swatch-circle warm-paper"></span>
+                <span class="swatch-label">Giấy Ấm</span>
+              </button>
+              <button class="swatch-card mobile-touch-target" data-theme="sepia" type="button">
+                <span class="swatch-circle sepia"></span>
+                <span class="swatch-label">Sepia</span>
+              </button>
+              <button class="swatch-card mobile-touch-target" data-theme="white" type="button">
+                <span class="swatch-circle white"></span>
+                <span class="swatch-label">Trắng Sáng</span>
+              </button>
             </div>
+          </div>
 
-            <!-- Basic Behavior Toggles -->
-            <div class="toggle-stack mt-2">
-              <label class="toggle-control">
-                <input id="autoScrollCheck" type="checkbox" checked>
-                <span class="toggle-track"></span>
-                <span class="toggle-label">Tự động cuộn theo câu đang đọc</span>
-              </label>
-
-              <label class="toggle-control">
-                <input id="autoNextCheck" type="checkbox" checked>
-                <span class="toggle-track"></span>
-                <span class="toggle-label">Tự động chuyển chương khi đọc xong</span>
-              </label>
-            </div>
+          <!-- Core Toggles -->
+          <div class="toggle-stack">
+            <label class="toggle-control mobile-touch-target">
+              <input type="checkbox" id="autoScrollCheck" checked>
+              <span class="toggle-track"></span>
+              <span class="toggle-label">Tự động cuộn theo đoạn đang đọc</span>
+            </label>
+            <label class="toggle-control mobile-touch-target">
+              <input type="checkbox" id="autoNextCheck" checked>
+              <span class="toggle-track"></span>
+              <span class="toggle-label">Tự động chuyển chương khi đọc hết</span>
+            </label>
           </div>
         </section>
 
-        <!-- TẦNG B: NÂNG CAO (ACCORDION COLLAPSIBLE) -->
+        <!-- TIER 2: ADVANCED CUSTOMIZATION (ACCORDION) -->
         <details class="settings-accordion" id="settingsAdvancedAccordion">
-          <summary class="accordion-summary">
+          <summary class="accordion-summary mobile-touch-target">
             <div class="summary-left">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
               <span>Tùy Chỉnh Nâng Cao</span>
             </div>
             <svg class="chevron-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
           </summary>
-
           <div class="accordion-content">
-            <!-- TTS Engine Choice -->
+            <!-- TTS Engine Selector -->
             <div class="setting-field">
-              <label>Nguồn giọng đọc (TTS Engine)</label>
+              <label>Động cơ tổng hợp giọng đọc (Engine)</label>
               <div class="engine-selector">
-                <label class="radio-card">
+                <label class="radio-card mobile-touch-target">
                   <input type="radio" name="ttsEngine" value="edge" checked>
                   <div class="radio-card-body">
-                    <span class="radio-title">⚡ Microsoft Neural TTS</span>
-                    <span class="radio-desc">Chất lượng cao · Hoài My / Nam Minh</span>
+                    <span class="radio-title">Microsoft Edge AI (Khuyên dùng)</span>
+                    <span class="radio-desc">Giọng đọc tự nhiên, ngắt nghỉ như người thật.</span>
                   </div>
                 </label>
-                <label class="radio-card">
+                <label class="radio-card mobile-touch-target">
                   <input type="radio" name="ttsEngine" value="webspeech">
                   <div class="radio-card-body">
-                    <span class="radio-title">🌐 Web Speech API</span>
-                    <span class="radio-desc">Giọng tích hợp sẵn trong trình duyệt thiết bị</span>
-                  </div>
-                </label>
-                <label class="radio-card" id="chromeExtEngineCard">
-                  <input type="radio" name="ttsEngine" value="chrome-ext">
-                  <div class="radio-card-body">
-                    <span class="radio-title">🧩 Chrome Extension TTS</span>
-                    <span class="radio-desc">Voice chạy nền chuyên dụng</span>
+                    <span class="radio-title">Web Speech Trình Duyệt (Offline)</span>
+                    <span class="radio-desc">Hoạt động khi không có internet.</span>
                   </div>
                 </label>
               </div>
@@ -330,178 +345,177 @@
             <!-- Pitch Slider -->
             <div class="setting-slider">
               <div class="slider-header">
-                <span>Độ cao giọng (Pitch)</span>
-                <output id="pitchValue">1.00</output>
+                <label for="pitch">Cao độ giọng (Pitch)</label>
+                <output id="pitchValue" for="pitch">1.00</output>
               </div>
-              <input id="pitch" type="range" min="0.5" max="1.5" step="0.05" value="1.0" aria-label="Độ cao giọng">
+              <input type="range" id="pitch" min="0.5" max="1.5" step="0.05" value="1.0">
             </div>
 
             <!-- Volume Slider -->
             <div class="setting-slider">
               <div class="slider-header">
-                <span>Âm lượng giọng đọc</span>
-                <output id="volumeValue">100%</output>
+                <label for="volume">Âm lượng đọc</label>
+                <output id="volumeValue" for="volume">100%</output>
               </div>
-              <input id="volume" type="range" min="0" max="1" step="0.05" value="1.0" aria-label="Âm lượng">
+              <input type="range" id="volume" min="0" max="1" step="0.05" value="1.0">
             </div>
 
-            <!-- Cache & Preload -->
+            <!-- Font Family Selector -->
             <div class="setting-field">
-              <label>Bộ nhớ đệm & Tải trước</label>
-              <div class="cache-status-card">
-                <div class="cache-stats-row">
-                  <div class="cache-stat-item">
-                    <span class="cache-stat-label">Đoạn đã lưu</span>
-                    <span id="cacheCountLabel" class="cache-stat-value">0</span>
-                  </div>
-                  <div class="cache-stat-item">
-                    <span class="cache-stat-label">Dung lượng</span>
-                    <span id="cacheSizeLabel" class="cache-stat-value">0 KB</span>
-                  </div>
-                  <div class="cache-stat-item">
-                    <span class="cache-stat-label">Tải trước</span>
-                    <span class="cache-stat-badge">5 đoạn ⚡</span>
-                  </div>
-                </div>
-
-                <label class="toggle-control mt-2">
-                  <input id="autoPreloadNextCheck" type="checkbox" checked>
-                  <span class="toggle-track"></span>
-                  <span class="toggle-label">Tự động tải trước 5 đoạn kế tiếp (nghe liền mạch 0ms)</span>
-                </label>
-
-                <button id="clearCacheBtn" class="btn btn-secondary w-full mt-2" type="button" title="Xóa bộ nhớ đệm âm thanh">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                  <span>Xóa bộ nhớ đệm âm thanh</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Font Family Selection -->
-            <div class="setting-field">
-              <label for="fontSelect">Phông chữ</label>
+              <label for="fontSelect">Phông chữ hiển thị</label>
               <select id="fontSelect" class="form-select">
-                <option value="'Be Vietnam Pro', sans-serif">Be Vietnam Pro (Hiện đại, tối ưu màn hình)</option>
-                <option value="'Literata', Georgia, serif">Literata (Chuẩn sách báo)</option>
-                <option value="'Lora', Georgia, serif">Lora (Thanh lịch, cổ điển)</option>
-                <option value="'Merriweather', serif">Merriweather (Ấm áp, dày dặn)</option>
-                <option value="'Montserrat', 'Montserrat Local', sans-serif">Montserrat (Nguyên bản DOCX)</option>
-                <option value="system-ui, -apple-system, sans-serif">Phông Hệ Thống (System UI)</option>
+                <option value="'Be Vietnam Pro', sans-serif">Be Vietnam Pro (Hiện đại, nét thanh)</option>
+                <option value="'Literata', serif">Literata (Chuẩn sách xuất bản)</option>
+                <option value="'Lora', serif">Lora (Mềm mại, thư giãn mắt)</option>
+                <option value="'Merriweather', serif">Merriweather (Cổ điển, rõ nét)</option>
+                <option value="'Montserrat', sans-serif">Montserrat (Hình khối ấn tượng)</option>
               </select>
             </div>
 
             <!-- Line Height Slider -->
             <div class="setting-slider">
               <div class="slider-header">
-                <span>Khoảng cách dòng (Line Height)</span>
-                <output id="lineHeightValue">1.85</output>
+                <label for="lineHeight">Khoảng cách dòng (Line-height)</label>
+                <output id="lineHeightValue" for="lineHeight">1.85</output>
               </div>
-              <input id="lineHeight" type="range" min="1.4" max="2.4" step="0.05" value="1.85" aria-label="Khoảng cách dòng">
+              <input type="range" id="lineHeight" min="1.4" max="2.4" step="0.05" value="1.85">
             </div>
 
             <!-- Page Width Slider -->
             <div class="setting-slider">
               <div class="slider-header">
-                <span>Độ rộng trang đọc</span>
-                <output id="pageWidthValue">840px</output>
+                <label for="pageWidth">Độ rộng trang sách (Desktop)</label>
+                <output id="pageWidthValue" for="pageWidth">840px</output>
               </div>
-              <input id="pageWidth" type="range" min="640" max="1100" step="20" value="840" aria-label="Độ rộng trang đọc">
+              <input type="range" id="pageWidth" min="600" max="1100" step="20" value="840">
             </div>
 
-            <!-- Text Alignment -->
+            <!-- Text Align Buttons -->
             <div class="setting-field">
               <label>Căn lề văn bản</label>
               <div class="btn-group">
-                <button class="btn btn-segmented active" data-align="left" type="button">Căn trái</button>
-                <button class="btn btn-segmented" data-align="justify" type="button">Căn đều 2 bên</button>
+                <button type="button" class="btn-segmented active mobile-touch-target" data-align="left">Căn trái</button>
+                <button type="button" class="btn-segmented mobile-touch-target" data-align="justify">Căn đều 2 bên</button>
               </div>
             </div>
 
             <!-- Drop Cap Toggle -->
-            <label class="toggle-control mt-2">
-              <input id="dropCapCheck" type="checkbox" checked>
+            <label class="toggle-control mobile-touch-target">
+              <input type="checkbox" id="dropCapCheck" checked>
               <span class="toggle-track"></span>
-              <span class="toggle-label">Hiển thị chữ hoa lớn đầu chương (Drop Cap)</span>
+              <span class="toggle-label">Chữ hoa đầu đoạn nổi bật (Drop Cap)</span>
             </label>
           </div>
         </details>
 
-        <!-- TẦNG C: HỆ THỐNG & DỮ LIỆU (ACCORDION COLLAPSIBLE) -->
+        <!-- TIER 3: SYSTEM & DATA MANAGEMENT (ACCORDION) -->
         <details class="settings-accordion" id="settingsSystemAccordion">
-          <summary class="accordion-summary">
+          <summary class="accordion-summary mobile-touch-target">
             <div class="summary-left">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
               <span>Hệ Thống & Dữ Liệu</span>
             </div>
             <svg class="chevron-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
           </summary>
-
           <div class="accordion-content">
-            <div class="btn-row">
-              <button id="exportDataBtn" class="btn btn-secondary flex-1" type="button">⬇ Xuất sao lưu (JSON)</button>
-              <button id="importDataBtn" class="btn btn-secondary flex-1" type="button">⬆ Nhập sao lưu</button>
-              <input id="importFileInput" type="file" accept=".json" hidden>
+            <!-- Audio Cache Status -->
+            <div class="cache-status-card">
+              <div class="cache-stats-row">
+                <div class="cache-stat-item">
+                  <span class="cache-stat-label">Bộ nhớ đệm âm thanh</span>
+                  <span id="cacheCountLabel" class="cache-stat-value">0</span>
+                </div>
+                <div class="cache-stat-item">
+                  <span class="cache-stat-label">Dung lượng ước tính</span>
+                  <span id="cacheSizeLabel" class="cache-stat-badge">0 KB</span>
+                </div>
+              </div>
+              <label class="toggle-control mt-2 mobile-touch-target">
+                <input type="checkbox" id="autoPreloadNextCheck" checked>
+                <span class="toggle-track"></span>
+                <span class="toggle-label">Tự động tải trước 5 đoạn tiếp theo</span>
+              </label>
+              <button id="clearCacheBtn" class="btn btn-secondary w-full mt-2 mobile-touch-target" type="button">
+                🗑️ Dọn dẹp bộ nhớ đệm
+              </button>
             </div>
 
-            <div class="danger-actions-stack mt-3">
-              <button id="resetProgressBtn" class="btn btn-danger-soft w-full" type="button">
-                ↺ Xóa tiến độ đọc sách
+            <!-- Backup & Restore Data -->
+            <div class="setting-field">
+              <label>Sao lưu & Khôi phục</label>
+              <div class="btn-row">
+                <button id="exportDataBtn" class="btn btn-secondary flex-1 mobile-touch-target" type="button">
+                  📤 Xuất JSON
+                </button>
+                <button id="importDataBtn" class="btn btn-secondary flex-1 mobile-touch-target" type="button">
+                  📥 Nhập JSON
+                </button>
+                <input type="file" id="importFileInput" accept=".json" hidden>
+              </div>
+            </div>
+
+            <!-- Danger Actions -->
+            <div class="setting-field">
+              <label>Thao tác dữ liệu</label>
+              <button id="resetProgressBtn" class="btn btn-danger-soft w-full mobile-touch-target" type="button">
+                🔄 Xóa toàn bộ tiến độ đọc
               </button>
-              <button id="resetSettingsBtn" class="btn btn-danger-soft w-full mt-2" type="button">
-                ↺ Khôi phục cài đặt mặc định
+              <button id="resetSettingsBtn" class="btn btn-danger-soft w-full mt-2 mobile-touch-target" type="button">
+                ⚠️ Khôi phục cài đặt gốc
               </button>
             </div>
           </div>
         </details>
 
         <div class="settings-footer">
-          <p>Phím tắt nhanh: <kbd>Space</kbd> Phát/Dừng · <kbd>F</kbd> Focus · <kbd>B</kbd> Bookmark · <kbd>←</kbd> <kbd>→</kbd> Tua đoạn</p>
+          <p>Thiên Sứ Nhà Bên · Web Reader Pro v2.0</p>
+          <p>Nhấn <kbd>?</kbd> trên máy tính để xem bảng phím tắt</p>
         </div>
       </div>
     </aside>
 
-    <!-- Main Reader Workspace -->
+    <!-- Reading Workspace -->
     <main class="reader-area" id="readerArea">
       <div class="reader-container" id="readerContainer">
-        
-        <!-- Quick Chapter Jump Bar (Horizontal scrolling chips) -->
-        <div class="quick-chapter-bar" id="quickChapterBar" aria-label="Chọn nhanh chương">
-          <div class="quick-bar-label">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-            <span>Chương:</span>
-          </div>
+        <!-- Quick Horizontal Chapter Chips Bar -->
+        <nav class="quick-chapter-bar" id="quickChapterBar" aria-label="Chuyển nhanh chương">
+          <span class="quick-bar-label">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <span>Phần:</span>
+          </span>
           <div class="quick-chips-scroll" id="quickChapterChips"></div>
-        </div>
+        </nav>
 
-        <!-- Chapter Header Hero -->
-        <div class="chapter-hero">
+        <!-- Chapter Hero Banner -->
+        <header class="chapter-hero" id="chapterHero">
           <div class="chapter-meta">
             <span id="chapterNumberLabel" class="chapter-number-pill">PHẦN 01</span>
-            <span id="chapterStatsLabel" class="chapter-stats">
-              <span class="skeleton-shimmer-inline" id="chapterStatsSkeleton" style="display:none; width: 100px; height: 14px;"></span>
-              <span id="chapterStatsRealText">Đang chuẩn bị…</span>
-            </span>
+            <div class="chapter-stats" id="chapterStatsLabel">
+              <span class="skeleton-shimmer-inline" id="chapterStatsSkeleton" style="width: 110px; height: 14px; display: inline-block;"></span>
+              <span id="chapterStatsRealText" style="display: none;"></span>
+            </div>
           </div>
-          <h2 id="chapterTitle" class="chapter-heading">Đang nạp nội dung…</h2>
+          <h2 id="chapterTitle" class="chapter-heading">Đang tải nội dung…</h2>
           
           <div class="chapter-subnav">
-            <button id="prevChapterBtnTop" class="btn btn-nav" aria-label="Chương trước">
+            <button id="prevChapterBtnTop" class="btn-nav mobile-touch-target" type="button" aria-label="Chương trước">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
               <span>Trước</span>
             </button>
-            <div class="chapter-progress-badge">
-              <span id="chapterParagraphProgress">...</span>
+            
+            <div class="chapter-pos-indicator">
+              <span id="chapterParagraphProgress" class="chapter-progress-badge">0 đoạn</span>
+              <button id="quickChapterModalBtn" class="btn-nav btn-jump mobile-touch-target" type="button" title="Chuyển nhanh tới chương">
+                <span>Chuyển phần ▾</span>
+              </button>
             </div>
-            <button id="quickChapterModalBtn" class="btn btn-nav btn-jump" title="Mở danh sách nhảy chương nhanh">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-              <span>Nhảy chương ▾</span>
-            </button>
-            <button id="nextChapterBtnTop" class="btn btn-nav" aria-label="Chương sau">
+
+            <button id="nextChapterBtnTop" class="btn-nav mobile-touch-target" type="button" aria-label="Chương kế tiếp">
               <span>Sau</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
             </button>
           </div>
-        </div>
+        </header>
 
         <!-- Chapter In-Progress Bar -->
         <div class="chapter-progress-track">
@@ -518,11 +532,11 @@
 
         <!-- Chapter Navigation Footer -->
         <nav class="chapter-nav-footer">
-          <button id="prevChapterBtnBottom" class="nav-card nav-prev" type="button">
+          <button id="prevChapterBtnBottom" class="nav-card nav-prev mobile-touch-target" type="button">
             <div class="nav-card-arrow">← Phần trước</div>
             <div id="prevChapterTitleLabel" class="nav-card-title">Không có</div>
           </button>
-          <button id="nextChapterBtnBottom" class="nav-card nav-next" type="button">
+          <button id="nextChapterBtnBottom" class="nav-card nav-next mobile-touch-target" type="button">
             <div class="nav-card-arrow">Phần kế tiếp →</div>
             <div id="nextChapterTitleLabel" class="nav-card-title">Không có</div>
           </button>
@@ -531,7 +545,7 @@
     </main>
   </div>
 
-  <!-- Redesigned TTS Player (Single Unified Listening Hub - Sticky bottom) -->
+  <!-- Redesigned Mobile-First TTS Player (Fixed bottom listening hub) -->
   <footer class="audio-player" id="audioPlayer" role="region" aria-label="Trình phát giọng đọc">
     <div class="player-inner">
       <!-- Left: Track & Paragraph Info with Unified Quick Badges -->
@@ -543,13 +557,17 @@
         </div>
         <div id="nowReadingSnippet" class="player-snippet">Chọn một đoạn hoặc bấm Phát để bắt đầu đọc</div>
         
-        <!-- Live Quick Badges: Speed · Voice · Timer · Engine -->
+        <!-- Live Quick Badges: Speed · Voice · Timer · Engine (Tap speed or timer to open quick sheet) -->
         <div class="player-quick-badges" id="playerQuickBadges">
-          <span id="playerSpeedBadge" class="p-badge">1.0×</span>
+          <button id="playerSpeedBadgeBtn" class="p-badge-btn mobile-touch-target" title="Chạm để đổi tốc độ">
+            <span id="playerSpeedBadge" class="p-badge">1.0×</span>
+          </button>
           <span class="p-badge-sep">·</span>
           <span id="playerVoiceBadge" class="p-badge">Hoài My</span>
           <span class="p-badge-sep">·</span>
-          <span id="playerTimerBadge" class="p-badge">🌙 Tắt</span>
+          <button id="playerTimerBadgeBtn" class="p-badge-btn mobile-touch-target" title="Chạm để hẹn giờ tắt">
+            <span id="playerTimerBadge" class="p-badge">🌙 Tắt</span>
+          </button>
           <span class="p-badge-sep">·</span>
           <span id="playerEngineBadge" class="p-badge">Edge AI</span>
         </div>
@@ -559,12 +577,12 @@
       <div class="player-center">
         <div class="controls-row">
           <!-- Prev Segment Button -->
-          <button id="playerPrevParaBtn" class="ctrl-btn ctrl-btn-step" aria-label="Đoạn trước" title="Đoạn trước (←)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
+          <button id="playerPrevParaBtn" class="ctrl-btn ctrl-btn-step mobile-touch-target" aria-label="Đoạn trước" title="Đoạn trước (←)">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
           </button>
 
           <!-- Rewind 5s Button (Secondary) -->
-          <button id="playerSeekBackBtn" class="ctrl-btn ctrl-btn-seek" aria-label="Tua lại 5 giây" title="Tua lại 5 giây">
+          <button id="playerSeekBackBtn" class="ctrl-btn ctrl-btn-seek mobile-touch-target" aria-label="Tua lại 5 giây" title="Tua lại 5 giây">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
               <path d="M3 3v5h5"></path>
@@ -573,13 +591,14 @@
           </button>
 
           <!-- Main Play / Pause Button (The most prominent centerpiece) -->
-          <button id="playerPlayPauseBtn" class="ctrl-btn play-main-btn" aria-label="Phát hoặc Tạm dừng" title="Phát / Tạm dừng (Space)">
-            <svg id="playIconSvg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
-            <svg id="pauseIconSvg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" hidden><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>
+          <button id="playerPlayPauseBtn" class="ctrl-btn play-main-btn mobile-touch-target" aria-label="Phát hoặc Tạm dừng" title="Phát / Tạm dừng (Space)">
+            <svg id="playIconSvg" width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
+            <svg id="pauseIconSvg" width="26" height="26" viewBox="0 0 24 24" fill="currentColor" hidden><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>
+            <div id="playerLoadingSpinner" class="spinner-small" hidden></div>
           </button>
 
           <!-- Forward 5s Button (Secondary) -->
-          <button id="playerSeekFwdBtn" class="ctrl-btn ctrl-btn-seek" aria-label="Tua tới 5 giây" title="Tua tới 5 giây">
+          <button id="playerSeekFwdBtn" class="ctrl-btn ctrl-btn-seek mobile-touch-target" aria-label="Tua tới 5 giây" title="Tua tới 5 giây">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
               <path d="M21 3v5h-5"></path>
@@ -588,13 +607,13 @@
           </button>
 
           <!-- Next Segment Button -->
-          <button id="playerNextParaBtn" class="ctrl-btn ctrl-btn-step" aria-label="Đoạn kế tiếp" title="Đoạn kế tiếp (→)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+          <button id="playerNextParaBtn" class="ctrl-btn ctrl-btn-step mobile-touch-target" aria-label="Đoạn kế tiếp" title="Đoạn kế tiếp (→)">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
           </button>
 
           <!-- Stop Button -->
-          <button id="playerStopBtn" class="ctrl-btn ctrl-btn-stop" aria-label="Dừng hẳn" title="Dừng đọc">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
+          <button id="playerStopBtn" class="ctrl-btn ctrl-btn-stop mobile-touch-target" aria-label="Dừng hẳn" title="Dừng đọc">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
           </button>
         </div>
 
@@ -611,159 +630,183 @@
       <!-- Right: Speed, Sleep Timer & Volume Actions -->
       <div class="player-right">
         <!-- Quick Speed Pill -->
-        <button id="speedPillBtn" class="player-pill-btn" title="Đổi tốc độ đọc" aria-label="Đổi tốc độ đọc">
+        <button id="speedPillBtn" class="player-pill-btn mobile-touch-target" title="Đổi tốc độ đọc" aria-label="Đổi tốc độ đọc">
           <span id="speedPillLabel">1.00×</span>
         </button>
 
         <!-- Quick Sleep Timer Pill -->
-        <button id="playerTimerPillBtn" class="player-pill-btn" title="Hẹn giờ tự động tắt" aria-label="Hẹn giờ tắt">
+        <button id="playerTimerPillBtn" class="player-pill-btn mobile-touch-target" title="Hẹn giờ tự động tắt" aria-label="Hẹn giờ tắt">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
           <span id="playerTimerLabel">Tắt</span>
         </button>
 
-        <!-- Quick Volume Button & Popover -->
+        <!-- Volume Popover Control -->
         <div class="volume-control-wrap" id="volumeControlWrap">
-          <button id="volumeMuteBtn" class="ctrl-btn volume-btn" aria-label="Âm lượng" title="Chỉnh âm lượng" aria-expanded="false" aria-haspopup="true">
-            <svg id="volumeHighSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
-            <svg id="volumeMuteSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+          <button id="volumeMuteBtn" class="icon-btn mobile-touch-target" aria-label="Âm lượng" title="Chỉnh âm lượng">
+            <svg id="volumeHighSvg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+            <svg id="volumeMuteSvg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" hidden><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
           </button>
-          <div class="volume-popover" id="volumePopover" hidden>
+          
+          <div id="volumePopover" class="volume-popover" hidden>
             <div class="volume-popover-header">
-              <span class="volume-popover-title">Âm lượng</span>
+              <span>Âm lượng Master</span>
               <span id="quickVolumePercent" class="volume-pct-badge">100%</span>
             </div>
-            <div class="volume-popover-slider-row">
-              <input id="quickVolumeSlider" class="volume-range-input" type="range" min="0" max="1" step="0.02" value="1" aria-label="Mức âm lượng">
-            </div>
+            <input type="range" id="quickVolumeSlider" min="0" max="1" step="0.05" value="1.0">
           </div>
         </div>
       </div>
     </div>
   </footer>
 
-  <!-- Lightbox Modal for High-Resolution Illustration Viewing -->
+  <!-- ==========================================================================
+       MODALS, LIGHTBOX & BOTTOM SHEETS
+       ========================================================================== -->
+
+  <!-- Quick Speed Mobile Bottom Sheet -->
+  <div id="quickSpeedModal" class="modal-dialog-wrap mobile-sheet-wrap" hidden role="dialog" aria-modal="true" aria-labelledby="speedSheetTitle">
+    <div class="modal-backdrop" id="quickSpeedBackdrop"></div>
+    <div class="modal-card mobile-sheet-card">
+      <div class="sheet-drag-indicator"></div>
+      <div class="modal-header">
+        <h3 id="speedSheetTitle">⚡ Chọn Tốc Độ Đọc</h3>
+        <button id="quickSpeedCloseBtn" class="modal-close-btn mobile-touch-target" aria-label="Đóng bảng tốc độ">&times;</button>
+      </div>
+      <p class="modal-desc">Chọn tốc độ phát âm thanh phù hợp với nhịp đọc của bạn:</p>
+      <div class="speed-options-grid" id="speedOptionsGrid">
+        <button class="speed-opt-btn mobile-touch-target" data-speed="0.75">0.75×</button>
+        <button class="speed-opt-btn mobile-touch-target" data-speed="0.9">0.90×</button>
+        <button class="speed-opt-btn active mobile-touch-target" data-speed="1.0">1.00× (Chuẩn)</button>
+        <button class="speed-opt-btn mobile-touch-target" data-speed="1.1">1.10×</button>
+        <button class="speed-opt-btn mobile-touch-target" data-speed="1.25">1.25×</button>
+        <button class="speed-opt-btn mobile-touch-target" data-speed="1.5">1.50×</button>
+        <button class="speed-opt-btn mobile-touch-target" data-speed="1.75">1.75×</button>
+        <button class="speed-opt-btn mobile-touch-target" data-speed="2.0">2.00×</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fullscreen Image Lightbox Modal -->
   <div id="lightboxModal" class="lightbox-modal" hidden role="dialog" aria-modal="true" aria-label="Xem ảnh minh họa">
     <div class="lightbox-backdrop" id="lightboxBackdrop"></div>
     <div class="lightbox-dialog">
-      <button id="lightboxCloseBtn" class="lightbox-close" aria-label="Đóng ảnh">&times;</button>
-      <img id="lightboxImg" class="lightbox-image" src="" alt="Ảnh minh họa">
+      <button id="lightboxCloseBtn" class="lightbox-close mobile-touch-target" aria-label="Đóng ảnh">&times;</button>
+      <img id="lightboxImg" class="lightbox-image" src="" alt="Ảnh minh họa phóng to">
       <div id="lightboxCaption" class="lightbox-caption"></div>
     </div>
   </div>
 
-  <!-- Sleep Timer Modal / Dialog -->
-  <div id="sleepTimerModal" class="modal-dialog-wrap" hidden role="dialog" aria-modal="true" aria-label="Hẹn giờ tự động tắt">
+  <!-- Sleep Timer Modal / Mobile Sheet -->
+  <div id="sleepTimerModal" class="modal-dialog-wrap mobile-sheet-wrap" hidden role="dialog" aria-modal="true" aria-labelledby="sleepTimerTitle">
     <div class="modal-backdrop" id="sleepTimerBackdrop"></div>
-    <div class="modal-card">
+    <div class="modal-card mobile-sheet-card">
+      <div class="sheet-drag-indicator"></div>
       <div class="modal-header">
-        <h3>🌙 Hẹn Giờ Tự Động Tắt</h3>
-        <button id="sleepTimerCloseBtn" class="modal-close-btn" aria-label="Đóng">&times;</button>
+        <h3 id="sleepTimerTitle">🌙 Hẹn Giờ Tắt Tự Động</h3>
+        <button id="sleepTimerCloseBtn" class="modal-close-btn mobile-touch-target" aria-label="Đóng bảng hẹn giờ">&times;</button>
       </div>
-      <div class="modal-body">
-        <p class="modal-desc">Trình đọc sẽ tự động dừng sau khoảng thời gian được chọn:</p>
-        <div class="timer-options-grid">
-          <button class="timer-opt-btn" data-minutes="0">Tắt hẹn giờ</button>
-          <button class="timer-opt-btn" data-minutes="10">10 phút</button>
-          <button class="timer-opt-btn" data-minutes="20">20 phút</button>
-          <button class="timer-opt-btn" data-minutes="30">30 phút</button>
-          <button class="timer-opt-btn" data-minutes="45">45 phút</button>
-          <button class="timer-opt-btn" data-minutes="60">60 phút</button>
-          <button class="timer-opt-btn" data-minutes="chapter">Hết chương hiện tại</button>
-        </div>
-        <div id="activeTimerNotice" class="active-timer-box" hidden>
-          <span>Thời gian còn lại:</span>
-          <strong id="timerCountdownDisplay">00:00</strong>
-          <button id="extendTimerBtn" class="btn btn-sm btn-secondary ml-auto" type="button">+10 phút</button>
-        </div>
+      <p class="modal-desc">Trình đọc sẽ tự động dừng phát âm thanh sau khoảng thời gian bạn chọn:</p>
+      
+      <div class="timer-options-grid">
+        <button class="timer-opt-btn mobile-touch-target" data-minutes="10">10 phút</button>
+        <button class="timer-opt-btn mobile-touch-target" data-minutes="20">20 phút</button>
+        <button class="timer-opt-btn mobile-touch-target" data-minutes="30">30 phút</button>
+        <button class="timer-opt-btn mobile-touch-target" data-minutes="45">45 phút</button>
+        <button class="timer-opt-btn mobile-touch-target" data-minutes="60">60 phút</button>
+        <button class="timer-opt-btn mobile-touch-target" data-minutes="chapter">Hết chương hiện tại</button>
+        <button class="timer-opt-btn active mobile-touch-target" data-minutes="0">Tắt hẹn giờ</button>
+      </div>
+
+      <div id="activeTimerNotice" class="active-timer-box" hidden>
+        <span>Thời gian còn lại:</span>
+        <strong id="timerCountdownDisplay">0:00</strong>
+        <button id="extendTimerBtn" class="btn btn-secondary text-sm ml-auto mobile-touch-target" type="button">+10 phút</button>
       </div>
     </div>
   </div>
 
-  <!-- Color Gallery Modal -->
-  <div id="colorGalleryModal" class="modal-dialog-wrap" hidden role="dialog" aria-modal="true" aria-label="Bộ sưu tập tranh màu">
+  <!-- Color Illustration Gallery Modal / Sheet -->
+  <div id="colorGalleryModal" class="modal-dialog-wrap mobile-sheet-wrap" hidden role="dialog" aria-modal="true" aria-labelledby="galleryModalTitle">
     <div class="modal-backdrop" id="colorGalleryBackdrop"></div>
-    <div class="modal-card gallery-modal-card" style="max-width: 900px; width: 95%;">
+    <div class="modal-card modal-large mobile-sheet-card">
+      <div class="sheet-drag-indicator"></div>
       <div class="modal-header">
         <h3 id="galleryModalTitle">🎨 Tranh Màu Đầu Sách</h3>
-        <button id="colorGalleryCloseBtn" class="modal-close-btn" aria-label="Đóng">&times;</button>
+        <button id="colorGalleryCloseBtn" class="modal-close-btn mobile-touch-target" aria-label="Đóng thư viện ảnh">&times;</button>
       </div>
-      <div class="modal-body">
-        <div id="colorGalleryGrid" class="gallery-grid"></div>
-      </div>
+      <div class="gallery-grid" id="colorGalleryGrid"></div>
     </div>
   </div>
 
-  <!-- Quick Chapter Jump Modal -->
-  <div id="quickJumpModal" class="modal-dialog-wrap" hidden role="dialog" aria-modal="true" aria-label="Chọn & Nhảy trực tiếp đến chương">
+  <!-- Quick Chapter Jump Modal / Sheet -->
+  <div id="quickJumpModal" class="modal-dialog-wrap mobile-sheet-wrap" hidden role="dialog" aria-modal="true" aria-labelledby="quickJumpModalTitle">
     <div class="modal-backdrop" id="quickJumpBackdrop"></div>
-    <div class="modal-card" style="max-width: 860px; width: 95%;">
+    <div class="modal-card mobile-sheet-card">
+      <div class="sheet-drag-indicator"></div>
       <div class="modal-header">
-        <h3 id="quickJumpModalTitle">⚡ Chọn & Nhảy Trực Tiếp Đến Chương</h3>
-        <button id="quickJumpCloseBtn" class="modal-close-btn" aria-label="Đóng">&times;</button>
+        <h3 id="quickJumpModalTitle">🚀 Chuyển Nhanh Tới Phần</h3>
+        <button id="quickJumpCloseBtn" class="modal-close-btn mobile-touch-target" aria-label="Đóng bảng chuyển phần">&times;</button>
       </div>
-      <div class="modal-body">
-        <div id="quickJumpGrid" class="quick-jump-grid"></div>
-      </div>
+      <div class="quick-jump-grid" id="quickJumpGrid"></div>
     </div>
   </div>
 
-  <!-- Keyboard Shortcuts Cheat Sheet Modal -->
-  <div id="shortcutsModal" class="modal-dialog-wrap" hidden role="dialog" aria-modal="true" aria-label="Phím tắt tiện lợi">
+  <!-- Keyboard Shortcuts Modal (Desktop power-users) -->
+  <div id="shortcutsModal" class="modal-dialog-wrap" hidden role="dialog" aria-modal="true" aria-labelledby="shortcutsModalTitle">
     <div class="modal-backdrop" id="shortcutsBackdrop"></div>
     <div class="modal-card">
       <div class="modal-header">
-        <h3>⌨ Phím Tắt Tiện Lợi</h3>
-        <button id="shortcutsCloseBtn" class="modal-close-btn" aria-label="Đóng">&times;</button>
+        <h3 id="shortcutsModalTitle">⌨️ Phím Tắt Tiện Ích</h3>
+        <button id="shortcutsCloseBtn" class="modal-close-btn" aria-label="Đóng bảng phím tắt">&times;</button>
       </div>
-      <div class="modal-body">
-        <div class="shortcuts-group-title">Phát Âm Thanh</div>
+      
+      <div class="shortcuts-group">
+        <h4 class="shortcuts-group-title">Điều khiển giọng đọc (TTS)</h4>
         <div class="shortcuts-grid">
-          <div class="shortcut-item"><kbd>Space</kbd> <span>Phát / Tạm dừng đọc</span></div>
-          <div class="shortcut-item"><kbd>←</kbd> <kbd>→</kbd> <span>Chuyển đoạn trước / sau</span></div>
-          <div class="shortcut-item"><kbd>Shift</kbd>+<kbd>←</kbd>/<kbd>→</kbd> <span>Chương trước / sau</span></div>
+          <div class="shortcut-item"><kbd>Space</kbd><span>Phát / Tạm dừng đọc</span></div>
+          <div class="shortcut-item"><kbd>←</kbd><span>Đoạn trước đó</span></div>
+          <div class="shortcut-item"><kbd>→</kbd><span>Đoạn kế tiếp</span></div>
+          <div class="shortcut-item"><kbd>Shift + ←</kbd><span>Chương trước</span></div>
+          <div class="shortcut-item"><kbd>Shift + →</kbd><span>Chương kế tiếp</span></div>
+          <div class="shortcut-item"><kbd>Esc</kbd><span>Dừng hẳn giọng đọc</span></div>
         </div>
+      </div>
 
-        <div class="shortcuts-group-title mt-3">Trình Đọc</div>
+      <div class="shortcuts-group mt-3">
+        <h4 class="shortcuts-group-title">Trải nghiệm & Điều hướng</h4>
         <div class="shortcuts-grid">
-          <div class="shortcut-item"><kbd>F</kbd> <span>Bật/Tắt chế độ Focus (Zen)</span></div>
-          <div class="shortcut-item"><kbd>B</kbd> <span>Đánh dấu (Bookmark) đoạn này</span></div>
-          <div class="shortcut-item"><kbd>M</kbd> <span>Đóng / Mở mục lục</span></div>
-          <div class="shortcut-item"><kbd>T</kbd> <span>Mở tab Cài đặt</span></div>
-        </div>
-
-        <div class="shortcuts-group-title mt-3">Hệ Thống</div>
-        <div class="shortcuts-grid">
-          <div class="shortcut-item"><kbd>?</kbd> <span>Mở bảng phím tắt này</span></div>
-          <div class="shortcut-item"><kbd>Esc</kbd> <span>Đóng cửa sổ / Dừng đọc / Thoát Focus</span></div>
+          <div class="shortcut-item"><kbd>F</kbd><span>Bật/Tắt chế độ Focus</span></div>
+          <div class="shortcut-item"><kbd>M</kbd><span>Đóng/Mở Mục lục</span></div>
+          <div class="shortcut-item"><kbd>B</kbd><span>Đánh dấu đoạn hiện tại</span></div>
+          <div class="shortcut-item"><kbd>T</kbd><span>Mở bảng Cài đặt</span></div>
+          <div class="shortcut-item"><kbd>?</kbd><span>Mở bảng phím tắt này</span></div>
         </div>
       </div>
     </div>
   </div>
 
   <!-- Confirmation Dialog Modal -->
-  <div id="confirmModal" class="modal-dialog-wrap" hidden role="dialog" aria-modal="true" aria-label="Xác nhận thao tác">
+  <div id="confirmModal" class="modal-dialog-wrap" hidden role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
     <div class="modal-backdrop" id="confirmBackdrop"></div>
-    <div class="modal-card" style="max-width: 440px;">
+    <div class="modal-card modal-compact">
       <div class="modal-header">
-        <h3 id="confirmModalTitle">Xác nhận</h3>
-        <button id="confirmCloseBtn" class="modal-close-btn" aria-label="Đóng">&times;</button>
+        <h3 id="confirmModalTitle">Xác nhận thao tác</h3>
+        <button id="confirmCloseBtn" class="modal-close-btn" aria-label="Hủy">&times;</button>
       </div>
-      <div class="modal-body">
-        <p id="confirmModalMessage" class="modal-desc">Bạn có chắc chắn muốn thực hiện thao tác này?</p>
-        <div class="btn-row mt-4">
-          <button id="confirmCancelBtn" class="btn btn-secondary flex-1" type="button">Hủy bỏ</button>
-          <button id="confirmOkBtn" class="btn btn-danger flex-1" type="button">Đồng ý</button>
-        </div>
+      <p id="confirmModalMessage" class="modal-desc">Bạn có chắc chắn muốn thực hiện thao tác này?</p>
+      <div class="modal-actions-row">
+        <button id="confirmCancelBtn" class="btn btn-secondary flex-1 mobile-touch-target" type="button">Hủy</button>
+        <button id="confirmOkBtn" class="btn btn-danger flex-1 mobile-touch-target" type="button">Đồng ý</button>
       </div>
     </div>
   </div>
 
   <!-- Toast Notification Container -->
-  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+  <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
-  <!-- Scripts -->
+  <!-- Application Scripts -->
   <script src="volumes.js"></script>
   <script src="js/chapters.js"></script>
-  <script src="js/app.js?v=ux-pro-v1"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>

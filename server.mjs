@@ -35,6 +35,36 @@ const audioCache = new Map();
 const pendingAudioCache = new Map();
 const MAX_CACHE_ITEMS = 200;
 
+// Valid silent MP3 frame (~26ms MPEG-1 Layer 3)
+const SILENT_MP3 = Buffer.from([
+  0xFF, 0xFB, 0x90, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+]);
+
+const DECORATIVE_SYMBOLS_REGEX = /[✧✦₊★☆♡♥♪♫✿❀❁❃❄❅❆❇❈❉❊❋▲▼◀▶◆◇■□●○◎✪✫✬✭✮✯✰※†‡~～〰=_*^#§•·\\/|<>🔖]/gu;
+
+export function cleanTextForTTS(rawText) {
+  if (!rawText || typeof rawText !== 'string') return '';
+  let text = rawText
+    .replace(/🔖/g, '')
+    .replace(DECORATIVE_SYMBOLS_REGEX, ' ')
+    .replace(/[\—\–]{2,}/g, ', ')
+    .replace(/~{2,}/g, ', ')
+    .replace(/\.{4,}/g, '...')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.replace(/^[\,\:\;\-\–\—\s]+/, '').replace(/[\-\–\—\s]+$/, '');
+}
+
+export function isSpeakableText(text) {
+  if (!text || typeof text !== 'string') return false;
+  const cleaned = cleanTextForTTS(text);
+  return /[\p{L}\p{N}]/u.test(cleaned);
+}
+
 function getCacheKey(voice, text, rate, pitch) {
   return `${voice}::${rate}::${pitch}::${text.trim()}`;
 }
@@ -87,6 +117,11 @@ function generateSecMsGec() {
 
 function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pitch = '+0Hz') {
   return new Promise((resolveTTS, rejectTTS) => {
+    const cleaned = cleanTextForTTS(text);
+    if (!isSpeakableText(cleaned)) {
+      return resolveTTS(SILENT_MP3);
+    }
+
     const reqId = crypto.randomUUID().replace(/-/g, '');
     const connId = crypto.randomUUID().replace(/-/g, '');
     const hash = generateSecMsGec();
@@ -121,7 +156,7 @@ function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pit
           try { ws.close(); } catch {}
           return rejectTTS(err);
         }
-        const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const escaped = cleaned.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='vi-VN'><voice name='${voice}'><prosody pitch='${pitch}' rate='${rate}'>${escaped}</prosody></voice></speak>`;
         const ssmlMsg = `X-RequestId:${reqId}\r\nX-Timestamp:${date}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`;
         ws.send(ssmlMsg);
@@ -152,7 +187,7 @@ function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pit
         try { ws.close(); } catch {}
         const total = Buffer.concat(audioChunks);
         if (!total.length) {
-          return rejectTTS(new Error('Received empty audio from Edge TTS'));
+          return resolveTTS(SILENT_MP3);
         }
         resolveTTS(total);
       }
@@ -173,7 +208,7 @@ function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pit
       if (audioChunks.length > 0) {
         resolveTTS(Buffer.concat(audioChunks));
       } else {
-        rejectTTS(new Error('Edge TTS WebSocket closed without audio'));
+        resolveTTS(SILENT_MP3);
       }
     });
   });
@@ -212,16 +247,30 @@ const server = createServer(async (req, res) => {
 
     // Endpoint: /tts hoặc /api/tts
     if (pathname === '/tts' || pathname === '/api/tts') {
-      const text = (url.searchParams.get('text') || '').trim();
+      const rawText = (url.searchParams.get('text') || '').trim();
       const rawVoice = url.searchParams.get('voice') || 'vi-VN-HoaiMyNeural';
       const rateParam = url.searchParams.get('rate') || '1.0';
       const pitchParam = url.searchParams.get('pitch') || '1.0';
 
-      if (!text) {
+      if (!rawText) {
         res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('Missing text parameter');
         return;
       }
+
+      // Check if text is non-speakable scene break (✧ ₊ ✦ ₊ ✧)
+      if (!isSpeakableText(rawText)) {
+        res.writeHead(200, {
+          'Content-Type': 'audio/mpeg',
+          'Content-Length': SILENT_MP3.length,
+          'X-Cache': 'STATIC-SILENT',
+          'Cache-Control': 'public, max-age=86400'
+        });
+        res.end(SILENT_MP3);
+        return;
+      }
+
+      const text = cleanTextForTTS(rawText);
 
       // Sanitize voice ShortName
       let voice = 'vi-VN-HoaiMyNeural';
@@ -270,9 +319,12 @@ const server = createServer(async (req, res) => {
 
         const fullBuffer = await pendingAudioCache.get(cacheKey);
         if (!fullBuffer || !fullBuffer.length) {
-          console.error('Edge TTS returned empty audio');
-          res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
-          res.end('TTS returned empty audio');
+          res.writeHead(200, {
+            'Content-Type': 'audio/mpeg',
+            'Content-Length': SILENT_MP3.length,
+            'Cache-Control': 'public, max-age=86400'
+          });
+          res.end(SILENT_MP3);
           return;
         }
 
@@ -292,9 +344,9 @@ const server = createServer(async (req, res) => {
       } catch (streamErr) {
         console.error('Edge TTS init error:', streamErr);
         if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+          res.writeHead(200, { 'Content-Type': 'audio/mpeg' });
         }
-        res.end('TTS generation error: ' + streamErr.message);
+        res.end(SILENT_MP3);
       }
       return;
     }

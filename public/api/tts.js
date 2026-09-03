@@ -6,6 +6,44 @@ const audioCache = new Map();
 const pendingAudioCache = new Map();
 const MAX_CACHE_ITEMS = 200;
 
+// Valid silent MP3 frame (~26ms MPEG-1 Layer 3)
+const SILENT_MP3 = Buffer.from([
+  0xFF, 0xFB, 0x90, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+]);
+
+const DECORATIVE_SYMBOLS_REGEX = /[✧✦₊★☆♡♥♪♫✿❀❁❃❄❅❆❇❈❉❊❋▲▼◀▶◆◇■□●○◎✪✫✬✭✮✯✰※†‡~～〰=_*^#§•·\\/|<>🔖]/gu;
+
+export function isSceneBreakDivider(text) {
+  if (text === null || text === undefined || typeof text !== 'string') return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const stripped = trimmed.replace(DECORATIVE_SYMBOLS_REGEX, '').replace(/[\s\-\.\,\:\;\"\'\(\)\[\]\{\}\/\\—–]/g, '');
+  return stripped.length === 0;
+}
+
+export function cleanTextForTTS(rawText) {
+  if (!rawText || typeof rawText !== 'string') return '';
+  let text = rawText
+    .replace(/🔖/g, '')
+    .replace(DECORATIVE_SYMBOLS_REGEX, ' ')
+    .replace(/[\—\–]{2,}/g, ', ')
+    .replace(/~{2,}/g, ', ')
+    .replace(/\.{4,}/g, '...')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.replace(/^[\,\:\;\-\–\—\s]+/, '').replace(/[\-\–\—\s]+$/, '');
+}
+
+export function isSpeakableText(text) {
+  if (!text || typeof text !== 'string') return false;
+  const cleaned = cleanTextForTTS(text);
+  return /[\p{L}\p{N}]/u.test(cleaned);
+}
+
 function generateSecMsGec() {
   const ticks = Math.floor(Date.now() / 1000) + 11644473600;
   const rounded = ticks - (ticks % 300);
@@ -44,6 +82,11 @@ function getCacheKey(voice, text, rate, pitch) {
 
 export function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0%', pitch = '+0Hz') {
   return new Promise((resolve, reject) => {
+    const cleaned = cleanTextForTTS(text);
+    if (!isSpeakableText(cleaned)) {
+      return resolve(SILENT_MP3);
+    }
+
     const reqId = crypto.randomUUID().replace(/-/g, '');
     const connId = crypto.randomUUID().replace(/-/g, '');
     const hash = generateSecMsGec();
@@ -78,7 +121,7 @@ export function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0
           try { ws.close(); } catch {}
           return reject(err);
         }
-        const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const escaped = cleaned.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='vi-VN'><voice name='${voice}'><prosody pitch='${pitch}' rate='${rate}'>${escaped}</prosody></voice></speak>`;
         const ssmlMsg = `X-RequestId:${reqId}\r\nX-Timestamp:${date}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`;
         ws.send(ssmlMsg);
@@ -109,7 +152,7 @@ export function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0
         try { ws.close(); } catch {}
         const total = Buffer.concat(audioChunks);
         if (!total.length) {
-          return reject(new Error('Received empty audio from Edge TTS'));
+          return resolve(SILENT_MP3);
         }
         resolve(total);
       }
@@ -130,7 +173,7 @@ export function synthesizeEdgeTTS(text, voice = 'vi-VN-HoaiMyNeural', rate = '+0
       if (audioChunks.length > 0) {
         resolve(Buffer.concat(audioChunks));
       } else {
-        reject(new Error('Edge TTS WebSocket closed without audio'));
+        resolve(SILENT_MP3);
       }
     });
   });
@@ -151,15 +194,25 @@ export default async function handler(req, res) {
     const rateParam = (req.query && req.query.rate) || '1.0';
     const pitchParam = (req.query && req.query.pitch) || '1.0';
 
-    const text = String(textParam).trim();
+    const rawText = String(textParam).trim();
+    if (!rawText) {
+      return res.status(400).send('Missing text parameter');
+    }
+
     const voice = sanitizeEdgeVoice(voiceParam);
     const rate = normalizeRate(rateParam);
     const pitch = normalizePitch(pitchParam);
 
-    if (!text) {
-      return res.status(400).send('Missing text parameter');
+    // If text contains only decorative symbols (✧ ₊ ✦ ₊ ✧, ◆, etc.), return silent frame immediately
+    if (!isSpeakableText(rawText)) {
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Content-Length', SILENT_MP3.length);
+      res.setHeader('X-Cache', 'STATIC-SILENT');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.status(200).send(SILENT_MP3);
     }
 
+    const text = cleanTextForTTS(rawText);
     const cacheKey = getCacheKey(voice, text, rate, pitch);
 
     if (audioCache.has(cacheKey)) {
@@ -180,7 +233,7 @@ export default async function handler(req, res) {
 
     const fullBuffer = await pendingAudioCache.get(cacheKey);
     if (!fullBuffer || !fullBuffer.length) {
-      return res.status(502).send('TTS returned empty audio');
+      return res.status(200).send(SILENT_MP3);
     }
 
     if (audioCache.size >= MAX_CACHE_ITEMS) {

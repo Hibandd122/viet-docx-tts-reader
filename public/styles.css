@@ -1368,6 +1368,50 @@ kbd {
   border-left: 3px dashed var(--text-muted);
 }
 
+/* Scene Break Decorative Divider (✧ ₊ ✦ ₊ ✧, ◆ ◆ ◆, etc.) */
+.book-content p.scene-break-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 22px 0 !important;
+  margin: 10px 0;
+  cursor: pointer;
+  user-select: none;
+  background: transparent !important;
+  border-left: none !important;
+  box-shadow: none !important;
+}
+.book-content p.scene-break-divider::before,
+.book-content p.scene-break-divider::after {
+  content: '';
+  flex: 1;
+  max-width: 140px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border-medium), transparent);
+}
+.scene-break-ornament {
+  padding: 0 16px;
+  font-size: 15px;
+  letter-spacing: 4px;
+  color: var(--accent-primary);
+  font-weight: 600;
+  text-shadow: 0 0 12px var(--accent-glow);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+.book-content p.scene-break-divider.reading-active .scene-break-ornament {
+  animation: ornamentPulse 1s ease infinite alternate;
+  color: #fbbf24;
+  text-shadow: 0 0 16px rgba(251, 191, 36, 0.7);
+}
+@keyframes ornamentPulse {
+  from { transform: scale(1); opacity: 0.85; }
+  to { transform: scale(1.18); opacity: 1; }
+}
+
 /* Scene Divider */
 .scene-divider {
   text-align: center;

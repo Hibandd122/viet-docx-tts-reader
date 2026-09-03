@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
-import { getParagraphKey, getBookStats, planLRUEviction, MAX_CACHE_BYTES } from '../js/tts-utils.js';
+import {
+  getParagraphKey,
+  getBookStats,
+  planLRUEviction,
+  isSceneBreakDivider,
+  cleanTextForTTS,
+  isSpeakableText,
+  MAX_CACHE_BYTES
+} from '../js/tts-utils.js';
 
 console.log('=== RUNNING PRODUCTION HARDENING & TTS RACE-CONDITION TESTS ===\n');
 
@@ -10,7 +18,37 @@ const key2 = getParagraphKey('vol9', 0, 5, 'vi-VN-NamMinhNeural', 0.8, 0.9);
 assert.equal(key2, 'vol9:ch0:p5:vi-VN-NamMinhNeural:-20%:-5Hz');
 console.log('✓ getParagraphKey produces consistent, unambiguous identity keys.');
 
-console.log('\nTest 2: Dynamic getBookStats (no hardcoding)...');
+console.log('\nTest 2: Special symbols sanitization & scene break recognition...');
+// Test 2a: Scene break divider recognition
+assert.equal(isSceneBreakDivider('✧ ₊ ✦ ₊ ✧'), true);
+assert.equal(isSceneBreakDivider('✦ ₊ ✧ ₊ ✦'), true);
+assert.equal(isSceneBreakDivider('◆ ◆ ◆'), true);
+assert.equal(isSceneBreakDivider('◇ ◇ ◇'), true);
+assert.equal(isSceneBreakDivider('★ ★ ★'), true);
+assert.equal(isSceneBreakDivider('***'), true);
+assert.equal(isSceneBreakDivider('— — —'), true);
+assert.equal(isSceneBreakDivider(''), false);
+assert.equal(isSpeakableText(''), false);
+assert.equal(isSceneBreakDivider('Amane nhìn Mahiru với vẻ dịu dàng.'), false);
+
+// Test 2b: Text cleaner removes decorative glyphs while keeping words intact
+const rawTextWithSymbols = 'Mahiru đỏ mặt nhìn sang chỗ khác ✧ ₊ ✦ ₊ ✧, miệng lẩm bẩm điều gì đó... 🔖';
+const cleaned = cleanTextForTTS(rawTextWithSymbols);
+assert.equal(cleaned.includes('✧'), false);
+assert.equal(cleaned.includes('✦'), false);
+assert.equal(cleaned.includes('₊'), false);
+assert.equal(cleaned.includes('🔖'), false);
+assert.equal(cleaned.includes('Mahiru đỏ mặt nhìn sang chỗ khác'), true);
+assert.equal(cleaned.includes('miệng lẩm bẩm điều gì đó...'), true);
+
+// Test 2c: Speakable verification
+assert.equal(isSpeakableText('✧ ₊ ✦ ₊ ✧'), false);
+assert.equal(isSpeakableText('◆ ◆ ◆'), false);
+assert.equal(isSpeakableText('   ---   '), false);
+assert.equal(isSpeakableText('Amane mỉm cười.'), true);
+console.log('✓ Special symbols sanitization: Scene break markers (✧ ₊ ✦ ₊ ✧) recognized & cleaned without TTS failures.');
+
+console.log('\nTest 3: Dynamic getBookStats (no hardcoding)...');
 const sampleVol10 = {
   id: 'vol10',
   title: 'Tập 10',
@@ -31,7 +69,7 @@ assert.equal(stats10.afterwords, 1);
 assert.equal(stats10.text, '3 chương · 2 ngoại truyện · 1 lời bạt');
 console.log('✓ getBookStats dynamically calculates totals from actual data.');
 
-console.log('\nTest 3: Scenario A & E (Generation Token Guard Simulation - Rapid Next/Prev & Play/Pause)...');
+console.log('\nTest 4: Scenario A & E (Generation Token Guard Simulation - Rapid Next/Prev & Play/Pause)...');
 let playbackGeneration = 0;
 let activeSpeaker = null;
 
@@ -56,7 +94,7 @@ await new Promise(r => setTimeout(r, 80));
 assert.equal(activeSpeaker, 'para-4-gen-4');
 console.log('✓ Scenario A & E Passed: Last user action wins; stale async callbacks discarded.');
 
-console.log('\nTest 4: Scenario B (Cross-Chapter Preload Isolation Simulation)...');
+console.log('\nTest 5: Scenario B (Cross-Chapter Preload Isolation Simulation)...');
 let chapterGeneration = 1;
 const preloadedCache = {};
 
@@ -83,7 +121,7 @@ assert.equal(preloadedCache['vol10:ch1:p10'], undefined, 'Chapter 1 preload must
 assert.equal(preloadedCache['vol10:ch2:p1'], 'audio-ch2');
 console.log('✓ Scenario B Passed: Preloads from prior chapters are rejected upon chapter switch.');
 
-console.log('\nTest 5: Scenario C & D (SpeechSynthesis and AbortController Isolation)...');
+console.log('\nTest 6: Scenario C & D (SpeechSynthesis and AbortController Isolation)...');
 let webSpeechActive = false;
 let abortedCount = 0;
 
@@ -98,7 +136,7 @@ assert.equal(abortedCount, 1);
 assert.equal(webSpeechActive, true);
 console.log('✓ Scenario C & D Passed: Previous fetch aborted cleanly on engine switch.');
 
-console.log('\nTest 6: Scenario F & G (LRU Cache Eviction & Memory limits)...');
+console.log('\nTest 7: Scenario F & G (LRU Cache Eviction & Memory limits)...');
 assert.ok(MAX_CACHE_BYTES >= 50 * 1024 * 1024, 'Cache limit must be at least 50MB');
 
 const mockCache = [
@@ -111,7 +149,7 @@ const toEvict = planLRUEviction(mockCache, 10 * 1024 * 1024, MAX_CACHE_BYTES);
 assert.ok(toEvict.includes('old1'), 'Oldest accessed item must be evicted');
 console.log('✓ Scenario F & G Passed: planLRUEviction correctly selects oldest accessed items.');
 
-console.log('\nTest 7: Scenario H (Cache Resiliency when Storage Fails)...');
+console.log('\nTest 8: Scenario H (Cache Resiliency when Storage Fails)...');
 const mockFailingGetCachedAudio = async () => null;
 const fallbackRes = await mockFailingGetCachedAudio();
 assert.equal(fallbackRes, null, 'Graceful fallback to direct fetch when cache is null');

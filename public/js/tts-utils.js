@@ -1,11 +1,56 @@
 /**
  * ==========================================================================
  * WEB READER PRO · TTS UTILITIES & DATA MODEL HELPERS
- * Pure Functional Helpers for TTS Identity, Book Stats, and LRU Cache
+ * Pure Functional Helpers for TTS Identity, Text Sanitization, Book Stats, and LRU Cache
  * ==========================================================================
  */
 
 export const MAX_CACHE_BYTES = 120 * 1024 * 1024; // 120 MB
+
+/**
+ * Regular expression matching decorative non-speech glyphs, scene breaks, and emoji
+ */
+export const DECORATIVE_SYMBOLS_REGEX = /[✧✦₊★☆♡♥♪♫✿❀❁❃❄❅❆❇❈❉❊❋▲▼◀▶◆◇■□●○◎✪✫✬✭✮✯✰※†‡~～〰=_*^#§•·\\/|<>🔖]/gu;
+
+/**
+ * Checks if a string is a non-empty scene break / decorative divider without speakable content
+ */
+export function isSceneBreakDivider(text) {
+  if (text === null || text === undefined || typeof text !== 'string') return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const stripped = trimmed.replace(DECORATIVE_SYMBOLS_REGEX, '').replace(/[\s\-\.\,\:\;\"\'\(\)\[\]\{\}\/\\—–]/g, '');
+  return stripped.length === 0;
+}
+
+/**
+ * Checks if a text has any speakable letters or digits
+ */
+export function isSpeakableText(text) {
+  if (text === null || text === undefined || typeof text !== 'string') return false;
+  const cleaned = cleanTextForTTS(text);
+  return /[\p{L}\p{N}]/u.test(cleaned);
+}
+
+/**
+ * Sanitizes and prepares text for speech synthesis (both Edge Neural TTS & Web Speech API)
+ * Removes decorative symbols (✧ ₊ ✦ ₊ ✧, ◆, ★, etc.) while preserving natural speech flow and punctuation
+ */
+export function cleanTextForTTS(rawText) {
+  if (!rawText || typeof rawText !== 'string') return '';
+  
+  let text = rawText
+    .replace(/🔖/g, '')
+    .replace(DECORATIVE_SYMBOLS_REGEX, ' ')
+    .replace(/[\—\–]{2,}/g, ', ')
+    .replace(/~{2,}/g, ', ')
+    .replace(/\.{4,}/g, '...')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  text = text.replace(/^[\,\:\;\-\–\—\s]+/, '').replace(/[\-\–\—\s]+$/, '');
+  return text;
+}
 
 export function getParagraphKey(volId, chapIdx, pIdx, voice, rate, pitch) {
   const rStr = `${rate >= 1 ? '+' : ''}${Math.round((rate - 1) * 100)}%`;
@@ -63,6 +108,10 @@ export function planLRUEviction(items, incomingBytes, maxBytes = MAX_CACHE_BYTES
 if (typeof window !== 'undefined') {
   window.TTSUtils = {
     MAX_CACHE_BYTES,
+    DECORATIVE_SYMBOLS_REGEX,
+    isSceneBreakDivider,
+    isSpeakableText,
+    cleanTextForTTS,
     getParagraphKey,
     getBookStats,
     planLRUEviction

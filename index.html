@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#070709">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Thiên Sứ Reader">
-  <meta name="description" content="Trình đọc tiểu thuyết Vol 9 & Vol 10 Tiếng Việt cao cấp với giọng đọc AI Microsoft Edge Neural chân thực, tối ưu cho điện thoại và máy tính.">
+  <meta name="apple-mobile-web-app-title" content="Thiên Sứ Reader Pro">
+  <meta name="description" content="Trình đọc và nghe audiobook tiểu thuyết Thiên Sứ Nhà Bên cao cấp với giọng đọc AI Microsoft Edge Neural chân thực, tối ưu cho điện thoại và máy tính.">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
   <link rel="apple-touch-icon" href="assets/favicon.svg">
-  <title>Thiên Sứ Nhà Bên · Trình Đọc Tiếng Việt Pro</title>
+  <title>Thiên Sứ Nhà Bên · Nền Tảng Light Novel & AI Voice Audiobook Pro</title>
   
   <!-- Google Fonts: Be Vietnam Pro, Literata, Lora, Merriweather, Montserrat -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -34,7 +34,7 @@
       </button>
       <div class="brand-text" id="brandTextWrap">
         <div class="brand-eyebrow">
-          <span class="badge-pro">PRO</span>
+          <span class="badge-pro">PRO AUDIOBOOK</span>
           <span id="appVolumeBadge" class="badge-vol">TẬP 10</span>
         </div>
         <h1 class="brand-title" id="appBrandTitle">Thiên Sứ Nhà Bên</h1>
@@ -140,8 +140,38 @@
   <!-- Sidebar Backdrop (Mobile Drawer Overlay) -->
   <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
 
-  <!-- Main Container Layout -->
+  <!-- Main Container Layout with Rail Navigation -->
   <div class="layout" id="mainLayout">
+    <!-- Desktop Left Rail Navigation -->
+    <nav class="desktop-nav-rail" id="desktopNavRail" aria-label="Điều hướng chính">
+      <div class="rail-items-group">
+        <button class="rail-item active" data-view="home" id="railNavHome" title="Trang chủ">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+          <span class="rail-label">Trang chủ</span>
+        </button>
+        <button class="rail-item" data-view="library" id="railNavLibrary" title="Thư viện tiểu thuyết">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          <span class="rail-label">Thư viện</span>
+        </button>
+        <button class="rail-item" data-view="reader" id="railNavReader" title="Trình đọc văn bản">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+          <span class="rail-label">Đang đọc</span>
+        </button>
+
+        <button class="rail-item" data-view="bookmarks" id="railNavBookmarks" title="Danh sách đánh dấu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+          <span class="rail-label">Đánh dấu</span>
+        </button>
+      </div>
+
+      <div class="rail-bottom-group">
+        <button class="rail-item" id="railNavSettings" title="Cài đặt hệ thống">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span class="rail-label">Cài đặt</span>
+        </button>
+      </div>
+    </nav>
+
     <!-- Sidebar / Drawer / Mobile Bottom Sheet for TOC, Bookmarks, Settings -->
     <aside class="sidebar" id="sidebar" aria-label="Thanh điều hướng và mục lục">
       <!-- Mobile Drawer Drag Handle & Header -->
@@ -191,7 +221,7 @@
         <!-- Search Box -->
         <div class="search-box">
           <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input type="text" id="chapterSearch" class="search-input" placeholder="Tìm chương, tiêu đề…" autocomplete="off">
+          <input type="text" id="chapterSearch" class="search-input" placeholder="Tìm chương, tiêu đề (Ctrl+K)…" autocomplete="off">
           <button id="searchClearBtn" class="search-clear-btn" aria-label="Xóa tìm kiếm" hidden>&times;</button>
         </div>
 
@@ -483,108 +513,308 @@
         </details>
 
         <div class="settings-footer">
-          <p>Thiên Sứ Nhà Bên · Web Reader Pro v2.0</p>
+          <p>Thiên Sứ Nhà Bên · Web Reader Pro v2.5</p>
           <p>Nhấn <kbd>?</kbd> trên máy tính để xem bảng phím tắt</p>
         </div>
       </div>
     </aside>
 
-    <!-- Reading Workspace -->
-    <main class="reader-area" id="readerArea">
-      <div class="reader-container" id="readerContainer">
-        <!-- Quick Horizontal Chapter Chips Bar -->
-        <nav class="quick-chapter-bar" id="quickChapterBar" aria-label="Chuyển nhanh chương">
-          <span class="quick-bar-label">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-            <span>Phần:</span>
-          </span>
-          <div class="quick-chips-scroll" id="quickChapterChips"></div>
-        </nav>
-
-        <!-- Chapter Hero Banner -->
-        <header class="chapter-hero" id="chapterHero">
-          <div class="chapter-meta">
-            <span id="chapterNumberLabel" class="chapter-number-pill">PHẦN 01</span>
-            <div class="chapter-stats" id="chapterStatsLabel">
-              <span class="skeleton-shimmer-inline" id="chapterStatsSkeleton" style="width: 110px; height: 14px; display: inline-block;"></span>
-              <span id="chapterStatsRealText" style="display: none;"></span>
+    <!-- App Views Container (Home · Library · Reader · Voice Studio) -->
+    <div class="app-views-container" id="appViewContainer">
+      
+      <!-- =====================================================================
+           VIEW 1: HOME PAGE
+           ===================================================================== -->
+      <section class="app-view active" id="viewHome" aria-label="Trang chủ">
+        <div class="home-container">
+          <!-- Continue Listening Hero Card -->
+          <div class="home-hero-card" id="homeHeroCard">
+            <div class="hero-backdrop-glow"></div>
+            <div class="hero-content-grid">
+              <div class="hero-cover-wrap">
+                <img id="homeHeroCover" src="images/cover.jpg" alt="Bìa truyện hiện tại" class="hero-cover-img" loading="eager">
+                <span class="hero-playing-badge" id="homeHeroPlayingBadge">
+                  <span class="mini-eq-bar"></span>
+                  <span class="mini-eq-bar"></span>
+                  <span class="mini-eq-bar"></span>
+                  <span id="homeHeroBadgeText">Sẵn sàng nghe</span>
+                </span>
+              </div>
+              <div class="hero-info">
+                <div class="hero-tags">
+                  <span class="tag-accent" id="homeHeroVolTag">TẬP 10</span>
+                  <span class="tag-meta" id="homeHeroChapterTag">Chương 1</span>
+                  <span class="tag-progress" id="homeHeroProgressTag">0% hoàn thành</span>
+                </div>
+                <h2 class="hero-title" id="homeHeroTitle">Ngày hôm sau ngập tràn niềm vui</h2>
+                <p class="hero-desc" id="homeHeroSnippet">Sau bữa tiệc sinh nhật bất ngờ, Amane và Mahiru bắt đầu một ngày mới ngập tràn dư vị hạnh phúc và ngọt ngào…</p>
+                
+                <div class="hero-actions">
+                  <button class="btn btn-primary btn-lg mobile-touch-target" id="homeResumeBtn" type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
+                    <span id="homeResumeBtnText">Tiếp Tục Nghe</span>
+                  </button>
+                  <button class="btn btn-secondary btn-lg mobile-touch-target" id="homeGoReaderBtn" type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                    <span>Đọc Chữ</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-          <h2 id="chapterTitle" class="chapter-heading">Đang tải nội dung…</h2>
-          
-          <div class="chapter-subnav">
-            <button id="prevChapterBtnTop" class="btn-nav mobile-touch-target" type="button" aria-label="Chương trước">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
-              <span>Trước</span>
-            </button>
-            
-            <div class="chapter-pos-indicator">
-              <span id="chapterParagraphProgress" class="chapter-progress-badge">0 đoạn</span>
-              <button id="quickChapterModalBtn" class="btn-nav btn-jump mobile-touch-target" type="button" title="Chuyển nhanh tới chương">
-                <span>Chuyển phần ▾</span>
-              </button>
+
+          <!-- Section: Volumes Showcase -->
+          <div class="home-section">
+            <div class="section-header">
+              <div class="section-title-group">
+                <h3 class="section-title">Danh Sách Tập Tiểu Thuyết</h3>
+                <span class="section-sub">Bản dịch Tiếng Việt chuẩn xác · Giọng đọc AI Studio</span>
+              </div>
+              <button class="section-more-btn" id="homeViewAllLibraryBtn" type="button">Xem thư viện →</button>
             </div>
 
-            <button id="nextChapterBtnTop" class="btn-nav mobile-touch-target" type="button" aria-label="Chương kế tiếp">
-              <span>Sau</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
-          </div>
-        </header>
+            <div class="volumes-grid">
+              <!-- Vol 10 Card -->
+              <article class="volume-showcase-card active-vol" data-volume="vol10">
+                <div class="vol-showcase-cover">
+                  <img src="assets/vol10/image_p002_1.jpeg" alt="Bìa Tập 10" loading="lazy">
+                  <span class="vol-tag-status">MỚI NHẤT</span>
+                </div>
+                <div class="vol-showcase-info">
+                  <span class="vol-badge-micro">TẬP 10</span>
+                  <h4 class="vol-showcase-title">Giáng Sinh & Valentine</h4>
+                  <p class="vol-showcase-author">Tác giả: Saeki-san · Họa sĩ: Hanekoto</p>
+                  <div class="vol-showcase-stats">
+                    <span>📖 10 Chương + 6 Ngoại truyện</span>
+                    <span>📝 ~106.000 từ</span>
+                  </div>
+                  <div class="vol-showcase-actions">
+                    <button class="btn btn-primary btn-sm quick-read-vol-btn" data-volume="vol10" type="button">Đọc Tập 10</button>
+                    <a href="chapters/vol10/Vol10_VI_corrected.docx" download class="btn btn-secondary btn-sm" title="Tải file Word DOCX">Tải DOCX</a>
+                  </div>
+                </div>
+              </article>
 
-        <!-- Chapter In-Progress Bar -->
-        <div class="chapter-progress-track">
-          <div id="chapterProgressBar" class="chapter-progress-fill"></div>
+              <!-- Vol 9 Card -->
+              <article class="volume-showcase-card" data-volume="vol9">
+                <div class="vol-showcase-cover">
+                  <img src="assets/image1.jpg" alt="Bìa Tập 9" loading="lazy">
+                  <span class="vol-tag-status complete">HOÀN TẤT</span>
+                </div>
+                <div class="vol-showcase-info">
+                  <span class="vol-badge-micro">TẬP 9</span>
+                  <h4 class="vol-showcase-title">Những Ngày Đông Ấm Áp</h4>
+                  <p class="vol-showcase-author">Tác giả: Saeki-san · Họa sĩ: Hanekoto</p>
+                  <div class="vol-showcase-stats">
+                    <span>📖 10 Chương đầy đủ</span>
+                    <span>📝 ~76.000 từ</span>
+                  </div>
+                  <div class="vol-showcase-actions">
+                    <button class="btn btn-primary btn-sm quick-read-vol-btn" data-volume="vol9" type="button">Đọc Tập 9</button>
+                    <a href="chapters/vol9/Vol9_VI_corrected.docx" download class="btn btn-secondary btn-sm" title="Tải file Word DOCX">Tải DOCX</a>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <!-- Section: Studio Features & Highlights -->
+          <div class="home-section">
+            <div class="features-grid">
+              <div class="feature-card">
+                <div class="feature-icon">🎙️</div>
+                <h4 class="feature-title">Microsoft Edge Neural AI</h4>
+                <p class="feature-desc">Hai giọng đọc tự nhiên chuẩn Studio: <strong>Hoài My</strong> (Nữ biểu cảm) & <strong>Nam Minh</strong> (Nam ấm áp), ngắt câu và cảm xúc chân thực.</p>
+              </div>
+              <div class="feature-card">
+                <div class="feature-icon">🎭</div>
+                <h4 class="feature-title">Đồng Bộ Đọc & Nghe Tức Thì</h4>
+                <p class="feature-desc">Highlight mượt mà từng câu văn đang đọc theo thời gian thực của giọng đọc AI, tự động căn giữa tầm mắt đọc.</p>
+              </div>
+              <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <h4 class="feature-title">Bộ Nhớ Đệm Âm Thanh Thông Minh</h4>
+                <p class="feature-desc">Tự động tải trước và lưu IndexedDB các câu tiếp theo, nghe mượt mà không độ trễ, tiết kiệm dữ liệu mạng.</p>
+              </div>
+            </div>
+          </div>
         </div>
+      </section>
 
-        <!-- Book Content Render Area -->
-        <article id="content" class="book-content" aria-live="polite">
-          <div class="loading-spinner" id="readerLoadingSpinner">
-            <div class="spinner"></div>
-            <p>Đang chuẩn bị nội dung…</p>
+      <!-- =====================================================================
+           VIEW 2: LIBRARY PAGE
+           ===================================================================== -->
+      <section class="app-view" id="viewLibrary" aria-label="Thư viện tiểu thuyết" hidden>
+        <div class="library-container">
+          <div class="library-header">
+            <div>
+              <h2 class="library-title">Thư Viện Tiểu Thuyết</h2>
+              <p class="library-sub">Toàn bộ tuyển tập Thiên Sứ Nhà Bên có sẵn giọng đọc AI</p>
+            </div>
+            <div class="library-filters">
+              <button class="filter-chip active" data-filter="all">Tất cả (2)</button>
+              <button class="filter-chip" data-filter="reading">Đang đọc</button>
+              <button class="filter-chip" data-filter="complete">Đã hoàn thành</button>
+            </div>
           </div>
-        </article>
 
-        <!-- Chapter Navigation Footer -->
-        <nav class="chapter-nav-footer">
-          <button id="prevChapterBtnBottom" class="nav-card nav-prev mobile-touch-target" type="button">
-            <div class="nav-card-arrow">← Phần trước</div>
-            <div id="prevChapterTitleLabel" class="nav-card-title">Không có</div>
-          </button>
-          <button id="nextChapterBtnBottom" class="nav-card nav-next mobile-touch-target" type="button">
-            <div class="nav-card-arrow">Phần kế tiếp →</div>
-            <div id="nextChapterTitleLabel" class="nav-card-title">Không có</div>
-          </button>
-        </nav>
-      </div>
-    </main>
+          <div class="library-grid" id="libraryNovelGrid">
+            <!-- Rendered dynamically by app.js -->
+          </div>
+        </div>
+      </section>
+
+      <!-- =====================================================================
+           VIEW 3: CHAPTER READER (THE HEART OF THE APP)
+           ===================================================================== -->
+      <section class="app-view" id="viewReader" aria-label="Trình đọc tiểu thuyết" hidden>
+        <!-- Reading Workspace -->
+        <main class="reader-area" id="readerArea">
+          <div class="reader-container" id="readerContainer">
+            <!-- Reader Mode Bar (Đọc sách · Nghe audio · Hybrid) -->
+            <div class="reader-mode-bar" id="readerModeBar">
+              <div class="mode-chips-group">
+                <button class="mode-chip active" data-mode="hybrid" id="modeHybridBtn" title="Vừa đọc vừa nghe highlight">
+                  <span>🎧 Đọc + Nghe AI</span>
+                </button>
+                <button class="mode-chip" data-mode="reading" id="modeReadingBtn" title="Chế độ đọc văn bản thuần">
+                  <span>📖 Đọc Sách</span>
+                </button>
+                <button class="mode-chip" data-mode="listening" id="modeListeningBtn" title="Chế độ nghe tập trung">
+                  <span>📻 Nghe Audio</span>
+                </button>
+              </div>
+
+              <!-- Quick Font Size Controls -->
+              <div class="quick-typography-controls">
+                <button class="quick-type-btn" id="decreaseFontSizeBtn" title="Giảm cỡ chữ (A-)">A-</button>
+                <span class="quick-type-val" id="quickFontDisplay">19px</span>
+                <button class="quick-type-btn" id="increaseFontSizeBtn" title="Tăng cỡ chữ (A+)">A+</button>
+              </div>
+            </div>
+
+            <!-- Quick Horizontal Chapter Chips Bar -->
+            <nav class="quick-chapter-bar" id="quickChapterBar" aria-label="Chuyển nhanh chương">
+              <span class="quick-bar-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span>Phần:</span>
+              </span>
+              <div class="quick-chips-scroll" id="quickChapterChips"></div>
+            </nav>
+
+            <!-- Chapter Hero Banner -->
+            <header class="chapter-hero" id="chapterHero">
+              <div class="chapter-meta">
+                <span id="chapterNumberLabel" class="chapter-number-pill">PHẦN 01</span>
+                <div class="chapter-stats" id="chapterStatsLabel">
+                  <span class="skeleton-shimmer-inline" id="chapterStatsSkeleton" style="width: 110px; height: 14px; display: inline-block;"></span>
+                  <span id="chapterStatsRealText" style="display: none;"></span>
+                </div>
+              </div>
+              <h2 id="chapterTitle" class="chapter-heading">Đang tải nội dung…</h2>
+              
+              <div class="chapter-subnav">
+                <button id="prevChapterBtnTop" class="btn-nav mobile-touch-target" type="button" aria-label="Chương trước">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                  <span>Trước</span>
+                </button>
+                
+                <div class="chapter-pos-indicator">
+                  <span id="chapterParagraphProgress" class="chapter-progress-badge">0 đoạn</span>
+                  <button id="quickChapterModalBtn" class="btn-nav btn-jump mobile-touch-target" type="button" title="Chuyển nhanh tới chương">
+                    <span>Chuyển phần ▾</span>
+                  </button>
+                </div>
+
+                <button id="nextChapterBtnTop" class="btn-nav mobile-touch-target" type="button" aria-label="Chương kế tiếp">
+                  <span>Sau</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+              </div>
+            </header>
+
+            <!-- Chapter In-Progress Bar -->
+            <div class="chapter-progress-track">
+              <div id="chapterProgressBar" class="chapter-progress-fill"></div>
+            </div>
+
+            <!-- Book Content Render Area -->
+            <article id="content" class="book-content" aria-live="polite">
+              <div class="loading-spinner" id="readerLoadingSpinner">
+                <div class="spinner"></div>
+                <p>Đang chuẩn bị nội dung…</p>
+              </div>
+            </article>
+
+            <!-- Chapter Navigation Footer -->
+            <nav class="chapter-nav-footer">
+              <button id="prevChapterBtnBottom" class="nav-card nav-prev mobile-touch-target" type="button">
+                <div class="nav-card-arrow">← Phần trước</div>
+                <div id="prevChapterTitleLabel" class="nav-card-title">Không có</div>
+              </button>
+              <button id="nextChapterBtnBottom" class="nav-card nav-next mobile-touch-target" type="button">
+                <div class="nav-card-arrow">Phần kế tiếp →</div>
+                <div id="nextChapterTitleLabel" class="nav-card-title">Không có</div>
+              </button>
+            </nav>
+          </div>
+        </main>
+      </section>
+
+      
+
+    </div>
   </div>
 
-  <!-- Redesigned Mobile-First TTS Player (Fixed bottom listening hub) -->
+  <!-- Smart Continue Reading Floating Banner -->
+  <div class="smart-resume-banner" id="smartResumeBanner" hidden>
+    <div class="resume-banner-content">
+      <span class="resume-pulse"></span>
+      <div class="resume-text-col">
+        <span class="resume-lead" id="resumeLeadText">Tiếp tục đọc dở?</span>
+        <span class="resume-details" id="resumeDetailsText">Chương 1 · Đoạn 15</span>
+      </div>
+      <button class="btn btn-primary btn-sm mobile-touch-target" id="resumeActionBtn" type="button">
+        ▶ Tiếp tục
+      </button>
+      <button class="resume-close-btn" id="resumeDismissBtn" aria-label="Bỏ qua">&times;</button>
+    </div>
+  </div>
+
+  <!-- Redesigned Mobile-First & Sticky Desktop TTS Player -->
   <footer class="audio-player" id="audioPlayer" role="region" aria-label="Trình phát giọng đọc">
     <div class="player-inner">
       <!-- Left: Track & Paragraph Info with Unified Quick Badges -->
       <div class="player-left">
-        <div class="player-heading-row">
-          <span class="pulse-indicator" id="playerPulseDot"></span>
-          <span id="playerChapterLabel" class="player-chapter-text">Chương 1</span>
-          <span id="playerSegmentPos" class="player-pos-badge" aria-live="polite">Đang khởi tạo…</span>
+        <div class="player-thumb-wrap" id="playerThumbTrigger" title="Mở rộng Trình phát (F)">
+          <img id="playerCoverThumb" src="images/cover.jpg" alt="Bìa" class="player-cover-img" loading="lazy">
+          <div class="player-thumb-overlay">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+          </div>
         </div>
-        <div id="nowReadingSnippet" class="player-snippet">Chọn một đoạn hoặc bấm Phát để bắt đầu đọc</div>
-        
-        <!-- Live Quick Badges: Speed · Voice · Timer · Engine (Tap speed or timer to open quick sheet) -->
-        <div class="player-quick-badges" id="playerQuickBadges">
-          <button id="playerSpeedBadgeBtn" class="p-badge-btn mobile-touch-target" title="Chạm để đổi tốc độ" aria-label="Đổi tốc độ đọc">
-            <span id="playerSpeedBadge" class="p-badge">1.0×</span>
-          </button>
-          <span class="p-badge-sep">·</span>
-          <span id="playerVoiceBadge" class="p-badge">Hoài My</span>
-          <span class="p-badge-sep">·</span>
-          <button id="playerTimerBadgeBtn" class="p-badge-btn mobile-touch-target" title="Chạm để hẹn giờ tắt" aria-label="Hẹn giờ tắt">
-            <span id="playerTimerBadge" class="p-badge">🌙 Tắt</span>
-          </button>
-          <span class="p-badge-sep">·</span>
-          <span id="playerEngineBadge" class="p-badge">Edge AI</span>
+
+        <div class="player-titles-col">
+          <div class="player-heading-row">
+            <span class="pulse-indicator" id="playerPulseDot"></span>
+            <span id="playerChapterLabel" class="player-chapter-text">Chương 1</span>
+            <span id="playerSegmentPos" class="player-pos-badge" aria-live="polite">Đang khởi tạo…</span>
+          </div>
+          <div id="nowReadingSnippet" class="player-snippet">Chọn một đoạn hoặc bấm Phát để bắt đầu đọc</div>
+          
+          <!-- Live Quick Badges: Speed · Voice · Timer · Engine -->
+          <div class="player-quick-badges" id="playerQuickBadges">
+            <button id="playerSpeedBadgeBtn" class="p-badge-btn mobile-touch-target" title="Chạm để đổi tốc độ" aria-label="Đổi tốc độ đọc">
+              <span id="playerSpeedBadge" class="p-badge">1.0×</span>
+            </button>
+            <span class="p-badge-sep">·</span>
+            <span id="playerVoiceBadge" class="p-badge">Hoài My</span>
+            <span class="p-badge-sep">·</span>
+            <button id="playerTimerBadgeBtn" class="p-badge-btn mobile-touch-target" title="Chạm để hẹn giờ tắt" aria-label="Hẹn giờ tắt">
+              <span id="playerTimerBadge" class="p-badge">🌙 Tắt</span>
+            </button>
+            <span class="p-badge-sep">·</span>
+            <span id="playerEngineBadge" class="p-badge">Edge AI</span>
+          </div>
         </div>
       </div>
 
@@ -593,10 +823,10 @@
         <div class="controls-row">
           <!-- Prev Segment Button -->
           <button id="playerPrevParaBtn" class="ctrl-btn ctrl-btn-step mobile-touch-target" aria-label="Đoạn trước" title="Đoạn trước (←)">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
           </button>
 
-          <!-- Rewind 5s Button (Secondary) -->
+          <!-- Rewind 5s Button -->
           <button id="playerSeekBackBtn" class="ctrl-btn ctrl-btn-seek mobile-touch-target" aria-label="Tua lại 5 giây" title="Tua lại 5 giây">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
@@ -605,14 +835,14 @@
             </svg>
           </button>
 
-          <!-- Main Play / Pause Button (The most prominent centerpiece) -->
+          <!-- Main Play / Pause Button -->
           <button id="playerPlayPauseBtn" class="ctrl-btn play-main-btn mobile-touch-target" aria-label="Phát" aria-pressed="false" title="Phát / Tạm dừng (Space)">
-            <svg id="playIconSvg" width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
-            <svg id="pauseIconSvg" width="26" height="26" viewBox="0 0 24 24" fill="currentColor" hidden><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>
+            <svg id="playIconSvg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
+            <svg id="pauseIconSvg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" hidden><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>
             <div id="playerLoadingSpinner" class="spinner-small" hidden></div>
           </button>
 
-          <!-- Forward 5s Button (Secondary) -->
+          <!-- Forward 5s Button -->
           <button id="playerSeekFwdBtn" class="ctrl-btn ctrl-btn-seek mobile-touch-target" aria-label="Tua tới 5 giây" title="Tua tới 5 giây">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
@@ -623,11 +853,11 @@
 
           <!-- Next Segment Button -->
           <button id="playerNextParaBtn" class="ctrl-btn ctrl-btn-step mobile-touch-target" aria-label="Đoạn kế tiếp" title="Đoạn kế tiếp (→)">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
           </button>
 
           <!-- Stop Button -->
-          <button id="playerStopBtn" class="ctrl-btn ctrl-btn-stop mobile-touch-target" aria-label="Dừng hẳn" title="Dừng đọc">
+          <button id="playerStopBtn" class="ctrl-btn ctrl-btn-stop mobile-touch-target" aria-label="Dừng hẳn" title="Dừng đọc (Esc)">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
           </button>
         </div>
@@ -670,13 +900,138 @@
             <input type="range" id="quickVolumeSlider" min="0" max="1" step="0.05" value="1.0">
           </div>
         </div>
+
+        <!-- Expand Full Player Modal Button -->
+        <button class="icon-btn mobile-touch-target" id="expandPlayerBtn" title="Mở rộng Trình phát (F)" aria-label="Mở rộng Trình phát">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+        </button>
       </div>
     </div>
   </footer>
 
+  <!-- Mobile Bottom Navigation Bar (Fixed bottom on small screens) -->
+  <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Điều hướng di động">
+    <button class="m-nav-item active" data-view="home" id="mNavHome">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+      <span>Trang chủ</span>
+    </button>
+    <button class="m-nav-item" data-view="library" id="mNavLibrary">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+      <span>Thư viện</span>
+    </button>
+    <button class="m-nav-item" data-view="reader" id="mNavReader">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+      <span>Đang đọc</span>
+    </button>
+    <button class="m-nav-item" data-view="voice-studio" id="mNavVoiceStudio">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+      <span>Giọng AI</span>
+    </button>
+    <button class="m-nav-item" id="mNavTocToggle">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+      <span>Mục lục</span>
+    </button>
+  </nav>
+
   <!-- ==========================================================================
-       MODALS, LIGHTBOX & BOTTOM SHEETS
+       MODALS, LIGHTBOX, EXPANDED PLAYER & BOTTOM SHEETS
        ========================================================================== -->
+
+  <!-- Expanded Cinematic Player Modal / Sheet -->
+  <div id="expandedPlayerModal" class="expanded-player-modal" hidden role="dialog" aria-modal="true" aria-label="Trình phát mở rộng">
+    <div class="expanded-player-backdrop" id="expandedPlayerBackdrop"></div>
+    <div class="expanded-player-sheet">
+      <div class="sheet-drag-indicator"></div>
+      <header class="expanded-header">
+        <button class="icon-btn mobile-touch-target" id="closeExpandedPlayerBtn" aria-label="Thu nhỏ trình phát">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </button>
+        <div class="expanded-header-title">Đang phát Audiobook</div>
+        <button class="icon-btn mobile-touch-target" id="expandedSleepTimerBtn" title="Hẹn giờ tắt">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+        </button>
+      </header>
+
+      <div class="expanded-body">
+        <!-- Large Vinyl Artwork with Ambient Glow -->
+        <div class="expanded-artwork-container">
+          <div class="artwork-glow-ambient" id="expandedArtworkGlow"></div>
+          <img id="expandedCoverImg" src="images/cover.jpg" alt="Bìa sách lớn" class="expanded-cover-art" loading="lazy">
+        </div>
+
+        <!-- Titles & Equalizer -->
+        <div class="expanded-meta">
+          <h3 id="expandedChapterTitle" class="expanded-title">Chương 1: Ngày hôm sau ngập tràn niềm vui</h3>
+          <p id="expandedVolSubtitle" class="expanded-sub">Tập 10: Giáng Sinh & Valentine · Thiên Sứ Nhà Bên</p>
+          
+          <!-- Waveform / Equalizer Animation -->
+          <div class="audio-visualizer-bars" id="audioVisualizerBars">
+            <span class="bar bar-1"></span>
+            <span class="bar bar-2"></span>
+            <span class="bar bar-3"></span>
+            <span class="bar bar-4"></span>
+            <span class="bar bar-5"></span>
+          </div>
+        </div>
+
+        <!-- Live Subtitle Spoken Quote -->
+        <div class="expanded-quote-box">
+          <p id="expandedSpokenText" class="expanded-spoken-text">“Chào buổi sáng, Amane…”</p>
+        </div>
+
+        <!-- Seek Timeline -->
+        <div class="expanded-timeline-wrap">
+          <div class="timeline-bar" id="expandedTimelineBar" role="slider" aria-label="Tiến độ âm thanh" tabindex="0">
+            <div id="expandedTimelineFill" class="timeline-fill"></div>
+          </div>
+          <div class="expanded-time-row">
+            <span id="expandedCurrentTime" class="time-label">0:00</span>
+            <span id="expandedTotalTime" class="time-label">0:00</span>
+          </div>
+        </div>
+
+        <!-- Large Main Controls -->
+        <div class="expanded-controls-row">
+          <button class="expanded-ctrl-btn" id="expandedPrevBtn" title="Đoạn trước">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
+          </button>
+          <button class="expanded-ctrl-btn seek-btn" id="expandedSeekBackBtn" title="Tua 5s">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+              <path d="M3 3v5h5"></path>
+            </svg>
+            <span class="seek-label">5s</span>
+          </button>
+          <button class="expanded-play-btn" id="expandedPlayPauseBtn" title="Phát/Tạm dừng">
+            <svg id="expandedPlayIcon" width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
+            <svg id="expandedPauseIcon" width="32" height="32" viewBox="0 0 24 24" fill="currentColor" hidden><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>
+          </button>
+          <button class="expanded-ctrl-btn seek-btn" id="expandedSeekFwdBtn" title="Tua 5s">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+              <path d="M21 3v5h-5"></path>
+            </svg>
+            <span class="seek-label">5s</span>
+          </button>
+          <button class="expanded-ctrl-btn" id="expandedNextBtn" title="Đoạn tiếp theo">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+          </button>
+        </div>
+
+        <!-- Speed Chips Grid -->
+        <div class="expanded-speed-row">
+          <span class="speed-row-label">Tốc độ:</span>
+          <div class="expanded-speed-chips">
+            <button class="exp-speed-chip" data-speed="0.75">0.75×</button>
+            <button class="exp-speed-chip active" data-speed="1.0">1.0×</button>
+            <button class="exp-speed-chip" data-speed="1.25">1.25×</button>
+            <button class="exp-speed-chip" data-speed="1.5">1.5×</button>
+            <button class="exp-speed-chip" data-speed="2.0">2.0×</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Quick Speed Mobile Bottom Sheet -->
   <div id="quickSpeedModal" class="modal-dialog-wrap mobile-sheet-wrap" hidden role="dialog" aria-modal="true" aria-labelledby="speedSheetTitle">
@@ -783,6 +1138,8 @@
           <div class="shortcut-item"><kbd>→</kbd><span>Đoạn kế tiếp</span></div>
           <div class="shortcut-item"><kbd>Shift + ←</kbd><span>Chương trước</span></div>
           <div class="shortcut-item"><kbd>Shift + →</kbd><span>Chương kế tiếp</span></div>
+          <div class="shortcut-item"><kbd>[</kbd> / <kbd>]</kbd><span>Giảm / Tăng tốc độ đọc</span></div>
+          <div class="shortcut-item"><kbd>1</kbd> - <kbd>4</kbd><span>Tốc độ 1.0× · 1.25× · 1.5× · 2.0×</span></div>
           <div class="shortcut-item"><kbd>Esc</kbd><span>Dừng hẳn giọng đọc</span></div>
         </div>
       </div>
@@ -790,6 +1147,7 @@
       <div class="shortcuts-group mt-3">
         <h4 class="shortcuts-group-title">Trải nghiệm & Điều hướng</h4>
         <div class="shortcuts-grid">
+          <div class="shortcut-item"><kbd>Ctrl + K</kbd> / <kbd>/</kbd><span>Tìm kiếm nhanh chương</span></div>
           <div class="shortcut-item"><kbd>F</kbd><span>Bật/Tắt chế độ Focus</span></div>
           <div class="shortcut-item"><kbd>M</kbd><span>Đóng/Mở Mục lục</span></div>
           <div class="shortcut-item"><kbd>B</kbd><span>Đánh dấu đoạn hiện tại</span></div>
@@ -821,7 +1179,7 @@
 
   <!-- Application Scripts -->
   <script src="volumes.js"></script>
-  <script src="js/chapters.js"></script>
-  <script src="js/app.js"></script>
+  <script src="chapters.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

@@ -2510,6 +2510,221 @@
   // ==========================================================================
   // 20. BOOTSTRAP & QUALITY VERIFICATION EXPORTS
   // ==========================================================================
+  
+  // ==========================================================================
+  // VIEW ROUTER & NAVIGATION CONTROLLER (Home · Library · Reader)
+  // ==========================================================================
+  let currentActiveView = 'home';
+
+  function switchView(viewName) {
+    if (!viewName) return;
+    currentActiveView = viewName;
+
+    // Update view visibility
+    const views = {
+      'home': $('viewHome'),
+      'library': $('viewLibrary'),
+      'reader': $('viewReader')
+    };
+
+    Object.entries(views).forEach(([name, el]) => {
+      if (el) {
+        if (name === viewName) {
+          el.removeAttribute('hidden');
+          el.classList.add('active');
+        } else {
+          el.setAttribute('hidden', '');
+          el.classList.remove('active');
+        }
+      }
+    });
+
+    // Update rail navigation items
+    $$('.rail-item').forEach(btn => {
+      const targetView = btn.dataset.view;
+      if (targetView === viewName) {
+        btn.classList.add('active');
+      } else if (targetView) {
+        btn.classList.remove('active');
+      }
+    });
+
+    // Update mobile bottom nav items if present
+    $$('.mobile-nav-btn').forEach(btn => {
+      const targetView = btn.dataset.view;
+      if (targetView === viewName) {
+        btn.classList.add('active');
+      } else if (targetView) {
+        btn.classList.remove('active');
+      }
+    });
+
+    // If switching to reader, ensure chapter content is rendered and scroll is restored
+    if (viewName === 'reader') {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      const activeP = $(`para-${state.paragraphIndex}`);
+      if (activeP && state.autoScroll) {
+        setTimeout(() => activeP.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120);
+      }
+    } else if (viewName === 'home') {
+      updateHomeHeroCard();
+    }
+  }
+
+  function updateHomeHeroCard() {
+    const volData = getActiveVolumeData();
+    const chap = volData?.chapters?.[state.chapterIndex];
+    
+    if ($('homeHeroCover')) {
+      $('homeHeroCover').src = volData.cover || 'images/cover.jpg';
+    }
+    if ($('homeHeroVolTag')) {
+      $('homeHeroVolTag').textContent = volData.id === 'vol10' ? 'TẬP 10' : 'TẬP 9';
+    }
+    if ($('homeHeroChapterTag') && chap) {
+      $('homeHeroChapterTag').textContent = chap.title || `Chương ${state.chapterIndex + 1}`;
+    }
+    if ($('homeHeroTitle') && chap) {
+      $('homeHeroTitle').textContent = chap.title;
+    }
+    if ($('homeHeroSnippet')) {
+      const activeP = $(`para-${state.paragraphIndex}`);
+      const text = activeP?.textContent?.replace(/🔖/g, '').trim();
+      if (text) {
+        $('homeHeroSnippet').textContent = text.slice(0, 160) + (text.length > 160 ? '…' : '');
+      }
+    }
+    if ($('homeHeroProgressTag')) {
+      const totalP = $$('.book-content p').length || 1;
+      const pct = Math.round(((state.paragraphIndex + 1) / totalP) * 100);
+      $('homeHeroProgressTag').textContent = `${Math.min(100, Math.max(1, pct))}% hoàn thành`;
+    }
+    if ($('homeHeroBadgeText')) {
+      $('homeHeroBadgeText').textContent = state.isPlaying ? 'Đang phát âm thanh…' : 'Sẵn sàng nghe';
+    }
+  }
+
+  function initViewRouterEvents() {
+    // Rail nav items
+    $('railNavHome')?.addEventListener('click', () => switchView('home'));
+    $('railNavLibrary')?.addEventListener('click', () => switchView('library'));
+    $('railNavReader')?.addEventListener('click', () => switchView('reader'));
+    $('railNavBookmarks')?.addEventListener('click', () => {
+      switchView('reader');
+      if (window.innerWidth <= 900) toggleSidebar();
+      $('tabBookmarksBtn')?.click();
+    });
+    $('railNavSettings')?.addEventListener('click', () => {
+      if (window.innerWidth <= 900) toggleSidebar();
+      $('tabSettingsBtn')?.click();
+    });
+
+    // Home view action buttons
+    $('homeResumeBtn')?.addEventListener('click', () => {
+      switchView('reader');
+      if (!state.isPlaying) {
+        togglePlayPause();
+      }
+    });
+
+    $('homeGoReaderBtn')?.addEventListener('click', () => {
+      switchView('reader');
+    });
+
+    $('homeViewAllLibraryBtn')?.addEventListener('click', () => {
+      switchView('library');
+    });
+
+    // Volume cards in Home & Library
+    $$('.quick-read-vol-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const targetVol = e.currentTarget.dataset.volume;
+        if (targetVol && targetVol !== state.volumeId) {
+          switchVolume(targetVol);
+        }
+        switchView('reader');
+      });
+    });
+
+    // Reader Mode selector (Hybrid · Reading · Listening)
+    $('modeHybridBtn')?.addEventListener('click', () => setReaderMode('hybrid'));
+    $('modeReadingBtn')?.addEventListener('click', () => setReaderMode('reading'));
+    $('modeListeningBtn')?.addEventListener('click', () => setReaderMode('listening'));
+
+    // Quick font size in Reader bar
+    $('decreaseFontSizeBtn')?.addEventListener('click', () => {
+      const newSize = Math.max(14, state.fontSize - 1);
+      state.fontSize = newSize;
+      applyTypography();
+      if ($('fontSize')) $('fontSize').value = newSize;
+      if ($('fontSizeValue')) $('fontSizeValue').textContent = `${newSize}px`;
+      if ($('quickFontDisplay')) $('quickFontDisplay').textContent = `${newSize}px`;
+      saveSettings({ fontSize: newSize });
+    });
+
+    $('increaseFontSizeBtn')?.addEventListener('click', () => {
+      const newSize = Math.min(32, state.fontSize + 1);
+      state.fontSize = newSize;
+      applyTypography();
+      if ($('fontSize')) $('fontSize').value = newSize;
+      if ($('fontSizeValue')) $('fontSizeValue').textContent = `${newSize}px`;
+      if ($('quickFontDisplay')) $('quickFontDisplay').textContent = `${newSize}px`;
+      saveSettings({ fontSize: newSize });
+    });
+
+    // Smart resume banner actions
+    $('resumeActionBtn')?.addEventListener('click', () => {
+      switchView('reader');
+      $('smartResumeBanner')?.setAttribute('hidden', '');
+      playParagraph(state.paragraphIndex);
+    });
+
+    $('resumeDismissBtn')?.addEventListener('click', () => {
+      $('smartResumeBanner')?.setAttribute('hidden', '');
+    });
+  }
+
+  function setReaderMode(mode) {
+    const readerArea = $('readerArea');
+    if (!readerArea) return;
+
+    $$('.mode-chip').forEach(c => c.classList.remove('active'));
+
+    if (mode === 'reading') {
+      $('modeReadingBtn')?.classList.add('active');
+      readerArea.classList.remove('mode-listening');
+      readerArea.classList.add('mode-pure-reading');
+      showToast('📖 Đã chuyển sang chế độ Đọc chữ');
+    } else if (mode === 'listening') {
+      $('modeListeningBtn')?.classList.add('active');
+      readerArea.classList.remove('mode-pure-reading');
+      readerArea.classList.add('mode-listening');
+      showToast('📻 Đã chuyển sang chế độ Nghe Audio tập trung');
+    } else {
+      $('modeHybridBtn')?.classList.add('active');
+      readerArea.classList.remove('mode-pure-reading', 'mode-listening');
+      showToast('🎧 Chế độ Đọc + Nghe AI đồng bộ');
+    }
+  }
+
+  function checkSmartResumePrompt() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_PROGRESS) || '{}');
+      if (saved && typeof saved.paragraphIndex === 'number' && saved.paragraphIndex > 0) {
+        const banner = $('smartResumeBanner');
+        if (banner) {
+          if ($('resumeDetailsText')) {
+            const volLabel = (saved.volumeId || state.volumeId) === 'vol10' ? 'Tập 10' : 'Tập 9';
+            $('resumeDetailsText').textContent = `${volLabel} · Chương ${(saved.chapterIndex || 0) + 1} · Đoạn ${saved.paragraphIndex + 1}`;
+          }
+          banner.removeAttribute('hidden');
+          banner.classList.add('visible');
+        }
+      }
+    } catch {}
+  }
+
+
   async function initApp() {
     updateDynamicLayoutMeasurements();
     applyTheme(state.theme);
@@ -2560,6 +2775,9 @@
     loadChapter(state.chapterIndex, false);
     
     await loadVoices();
+    initViewRouterEvents();
+    checkSmartResumePrompt();
+    if ($('quickFontDisplay')) $('quickFontDisplay').textContent = `${state.fontSize}px`;
 
     if ('serviceWorker' in navigator && isHttp) {
       navigator.serviceWorker.register('./sw.js').catch(() => {});

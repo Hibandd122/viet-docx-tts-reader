@@ -2576,7 +2576,7 @@
     const chap = volData?.chapters?.[state.chapterIndex];
     
     if ($('homeHeroCover')) {
-      $('homeHeroCover').src = volData.cover || 'images/cover.jpg';
+      $('homeHeroCover').src = volData.cover || (volData.id === 'vol10' ? 'assets/vol10/image_p002_1.jpeg' : 'assets/image1.jpg');
     }
     if ($('homeHeroVolTag')) {
       $('homeHeroVolTag').textContent = volData.id === 'vol10' ? 'TẬP 10' : 'TẬP 9';
@@ -2725,6 +2725,143 @@
   }
 
 
+  
+  // ==========================================================================
+  // EXPANDED CINEMATIC PLAYER & MOBILE NAV CONTROLLER
+  // ==========================================================================
+  function openExpandedPlayer() {
+    const modal = $('expandedPlayerModal');
+    if (!modal) return;
+    modal.removeAttribute('hidden');
+    modal.classList.add('open');
+    if (state.isPlaying) {
+      modal.classList.add('playing');
+    } else {
+      modal.classList.remove('playing');
+    }
+    updateExpandedPlayerUI();
+  }
+
+  function closeExpandedPlayer() {
+    const modal = $('expandedPlayerModal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    modal.setAttribute('hidden', '');
+  }
+
+  function updateExpandedPlayerUI() {
+    const volData = getActiveVolumeData();
+    const chap = volData?.chapters?.[state.chapterIndex];
+    
+    if ($('expandedCoverImg')) {
+      $('expandedCoverImg').src = volData.cover || (volData.id === 'vol10' ? 'assets/vol10/image_p002_1.jpeg' : 'assets/image1.jpg');
+    }
+    if ($('expandedChapterTitle') && chap) {
+      $('expandedChapterTitle').textContent = chap.title;
+    }
+    if ($('expandedVolSubtitle')) {
+      const volLabel = volData.id === 'vol10' ? 'Tập 10: Giáng Sinh & Valentine' : 'Tập 9: Những Ngày Đông Ấm Áp';
+      $('expandedVolSubtitle').textContent = `${volLabel} · Thiên Sứ Nhà Bên`;
+    }
+    if ($('expandedSpokenText')) {
+      const activeP = $(`para-${state.paragraphIndex}`);
+      const text = activeP?.textContent?.replace(/🔖/g, '').trim();
+      if (text) {
+        $('expandedSpokenText').textContent = `“${text}”`;
+      }
+    }
+    
+    // Sync play/pause icons in expanded player
+    const playSvg = $('expandedPlayIcon');
+    const pauseSvg = $('expandedPauseIcon');
+    if (playSvg) playSvg.hidden = state.isPlaying;
+    if (pauseSvg) pauseSvg.hidden = !state.isPlaying;
+
+    // Sync timeline
+    if ($('expandedCurrentTime') && $('playerCurrentTime')) {
+      $('expandedCurrentTime').textContent = $('playerCurrentTime').textContent;
+    }
+    if ($('expandedTotalTime') && $('playerTotalTime')) {
+      $('expandedTotalTime').textContent = $('playerTotalTime').textContent;
+    }
+    if ($('expandedTimelineFill') && $('timelineFill')) {
+      $('expandedTimelineFill').style.width = $('timelineFill').style.width;
+    }
+
+    // Sync speed chips
+    $$('.exp-speed-chip').forEach(btn => {
+      const sp = parseFloat(btn.dataset.speed || '1.0');
+      if (Math.abs(sp - state.rate) < 0.05) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+
+    const modal = $('expandedPlayerModal');
+    if (modal) {
+      if (state.isPlaying) modal.classList.add('playing');
+      else modal.classList.remove('playing');
+    }
+  }
+
+  function initExpandedPlayerEvents() {
+    // Open / Close expanded player
+    $('expandPlayerBtn')?.addEventListener('click', openExpandedPlayer);
+    $('closeExpandedPlayerBtn')?.addEventListener('click', closeExpandedPlayer);
+    $('expandedPlayerBackdrop')?.addEventListener('click', closeExpandedPlayer);
+
+    // Expanded Controls
+    $('expandedPlayPauseBtn')?.addEventListener('click', () => {
+      togglePlayPause();
+      setTimeout(updateExpandedPlayerUI, 50);
+    });
+
+    $('expandedPrevBtn')?.addEventListener('click', () => {
+      playParagraph(Math.max(0, state.paragraphIndex - 1));
+      setTimeout(updateExpandedPlayerUI, 50);
+    });
+
+    $('expandedNextBtn')?.addEventListener('click', () => {
+      playParagraph(state.paragraphIndex + 1);
+      setTimeout(updateExpandedPlayerUI, 50);
+    });
+
+    $('expandedSeekBackBtn')?.addEventListener('click', () => {
+      if (state.masterAudio && state.masterAudio.currentTime > 0) {
+        state.masterAudio.currentTime = Math.max(0, state.masterAudio.currentTime - 5);
+      }
+    });
+
+    $('expandedSeekFwdBtn')?.addEventListener('click', () => {
+      if (state.masterAudio && state.masterAudio.currentTime < state.masterAudio.duration) {
+        state.masterAudio.currentTime = Math.min(state.masterAudio.duration, state.masterAudio.currentTime + 5);
+      }
+    });
+
+    $('expandedSleepTimerBtn')?.addEventListener('click', () => {
+      closeExpandedPlayer();
+      openModal('sleepTimerModal');
+    });
+
+    // Speed chips inside expanded player
+    $$('.exp-speed-chip').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const sp = parseFloat(e.currentTarget.dataset.speed || '1.0');
+        setPlaybackSpeed(sp);
+        $$('.exp-speed-chip').forEach(b => b.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+      });
+    });
+
+    // Mobile Bottom Navigation Bar Buttons
+    $('mNavHome')?.addEventListener('click', () => switchView('home'));
+    $('mNavLibrary')?.addEventListener('click', () => switchView('library'));
+    $('mNavReader')?.addEventListener('click', () => switchView('reader'));
+    $('mNavTocToggle')?.addEventListener('click', () => toggleSidebar());
+  }
+
+
   async function initApp() {
     updateDynamicLayoutMeasurements();
     applyTheme(state.theme);
@@ -2776,6 +2913,7 @@
     
     await loadVoices();
     initViewRouterEvents();
+    initExpandedPlayerEvents();
     checkSmartResumePrompt();
     if ($('quickFontDisplay')) $('quickFontDisplay').textContent = `${state.fontSize}px`;
 

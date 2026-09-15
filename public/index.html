@@ -9,8 +9,8 @@
   <meta name="apple-mobile-web-app-title" content="Thiên Sứ Reader Pro">
   <meta name="description" content="Trình đọc và nghe audiobook tiểu thuyết Thiên Sứ Nhà Bên cao cấp với giọng đọc AI Microsoft Edge Neural chân thực, tối ưu cho điện thoại và máy tính.">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
-  <link rel="apple-touch-icon" href="assets/favicon.svg">
+  <link rel="icon" type="image/svg+xml" href="favicon.png">
+  <link rel="apple-touch-icon" href="favicon.png">
   <title>Thiên Sứ Nhà Bên · Nền Tảng Light Novel & AI Voice Audiobook Pro</title>
   
   <!-- Google Fonts: Be Vietnam Pro, Literata, Lora, Merriweather, Montserrat -->
@@ -145,7 +145,7 @@
     <!-- Desktop Left Rail Navigation -->
     <nav class="desktop-nav-rail" id="desktopNavRail" aria-label="Điều hướng chính">
       <div class="rail-items-group">
-        <button class="rail-item active" data-view="home" id="railNavHome" title="Trang chủ">
+        <button class="rail-item" data-view="home" id="railNavHome" title="Trang chủ">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
           <span class="rail-label">Trang chủ</span>
         </button>
@@ -153,7 +153,7 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
           <span class="rail-label">Thư viện</span>
         </button>
-        <button class="rail-item" data-view="reader" id="railNavReader" title="Trình đọc văn bản">
+        <button class="rail-item active" data-view="reader" id="railNavReader" title="Trình đọc văn bản">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
           <span class="rail-label">Đang đọc</span>
         </button>
@@ -207,7 +207,7 @@
         <!-- Active Volume Info Banner -->
         <div class="volume-info-card">
           <div class="vol-card-thumb">
-            <img id="volCardCover" src="images/cover.jpg" alt="Bìa tập truyện" loading="lazy">
+            <img id="volCardCover" src="assets/vol10/image_p002_1.jpeg" alt="Bìa tập truyện" loading="lazy">
           </div>
           <div class="vol-card-details">
             <h2 class="vol-card-title" id="volCardTitle">Tập 10: Giáng Sinh & Valentine</h2>
@@ -525,14 +525,14 @@
       <!-- =====================================================================
            VIEW 1: HOME PAGE
            ===================================================================== -->
-      <section class="app-view active" id="viewHome" aria-label="Trang chủ">
+      <section class="app-view" id="viewHome" aria-label="Trang chủ" hidden>
         <div class="home-container">
           <!-- Continue Listening Hero Card -->
           <div class="home-hero-card" id="homeHeroCard">
             <div class="hero-backdrop-glow"></div>
             <div class="hero-content-grid">
               <div class="hero-cover-wrap">
-                <img id="homeHeroCover" src="images/cover.jpg" alt="Bìa truyện hiện tại" class="hero-cover-img" loading="eager">
+                <img id="homeHeroCover" src="assets/vol10/image_p002_1.jpeg" alt="Bìa truyện hiện tại" class="hero-cover-img" loading="eager">
                 <span class="hero-playing-badge" id="homeHeroPlayingBadge">
                   <span class="mini-eq-bar"></span>
                   <span class="mini-eq-bar"></span>
@@ -667,7 +667,7 @@
       <!-- =====================================================================
            VIEW 3: CHAPTER READER (THE HEART OF THE APP)
            ===================================================================== -->
-      <section class="app-view" id="viewReader" aria-label="Trình đọc tiểu thuyết" hidden>
+      <section class="app-view active" id="viewReader" aria-label="Trình đọc tiểu thuyết">
         <!-- Reading Workspace -->
         <main class="reader-area" id="readerArea">
           <div class="reader-container" id="readerContainer">
@@ -787,7 +787,7 @@
       <!-- Left: Track & Paragraph Info with Unified Quick Badges -->
       <div class="player-left">
         <div class="player-thumb-wrap" id="playerThumbTrigger" title="Mở rộng Trình phát (F)">
-          <img id="playerCoverThumb" src="images/cover.jpg" alt="Bìa" class="player-cover-img" loading="lazy">
+          <img id="playerCoverThumb" src="assets/vol10/image_p002_1.jpeg" alt="Bìa" class="player-cover-img" loading="lazy">
           <div class="player-thumb-overlay">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
           </div>
@@ -911,23 +911,20 @@
 
   <!-- Mobile Bottom Navigation Bar (Fixed bottom on small screens) -->
   <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Điều hướng di động">
-    <button class="m-nav-item active" data-view="home" id="mNavHome">
+    <button class="mobile-nav-btn active" data-view="reader" id="mNavReader">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
       <span>Trang chủ</span>
     </button>
-    <button class="m-nav-item" data-view="library" id="mNavLibrary">
+    <button class="mobile-nav-btn" data-view="library" id="mNavLibrary">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
       <span>Thư viện</span>
     </button>
-    <button class="m-nav-item" data-view="reader" id="mNavReader">
+    <button class="mobile-nav-btn" data-view="home" id="mNavHome">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
       <span>Đang đọc</span>
     </button>
-    <button class="m-nav-item" data-view="voice-studio" id="mNavVoiceStudio">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
-      <span>Giọng AI</span>
-    </button>
-    <button class="m-nav-item" id="mNavTocToggle">
+
+    <button class="mobile-nav-btn" id="mNavTocToggle">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
       <span>Mục lục</span>
     </button>
@@ -956,7 +953,7 @@
         <!-- Large Vinyl Artwork with Ambient Glow -->
         <div class="expanded-artwork-container">
           <div class="artwork-glow-ambient" id="expandedArtworkGlow"></div>
-          <img id="expandedCoverImg" src="images/cover.jpg" alt="Bìa sách lớn" class="expanded-cover-art" loading="lazy">
+          <img id="expandedCoverImg" src="assets/vol10/image_p002_1.jpeg" alt="Bìa sách lớn" class="expanded-cover-art" loading="lazy">
         </div>
 
         <!-- Titles & Equalizer -->

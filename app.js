@@ -1842,7 +1842,12 @@
       else unlockBodyScroll();
     } else {
       state.isSidebarOpen = !state.isSidebarOpen;
-      sidebar.style.display = state.isSidebarOpen ? 'flex' : 'none';
+      if (state.isSidebarOpen) {
+        sidebar.classList.remove('collapsed');
+        sidebar.style.removeProperty('display');
+      } else {
+        sidebar.classList.add('collapsed');
+      }
     }
   }
 
@@ -2609,6 +2614,10 @@
     $('railNavHome')?.addEventListener('click', () => switchView('home'));
     $('railNavLibrary')?.addEventListener('click', () => switchView('library'));
     $('railNavReader')?.addEventListener('click', () => switchView('reader'));
+    $('railNavToc')?.addEventListener('click', () => {
+      toggleSidebar();
+      $('tabChaptersBtn')?.click();
+    });
     $('railNavBookmarks')?.addEventListener('click', () => {
       switchView('reader');
       if (window.innerWidth <= 900) toggleSidebar();

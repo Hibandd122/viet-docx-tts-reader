@@ -1,4 +1,4 @@
-const CACHE_NAME = 'web-reader-pro-v5';
+const CACHE_NAME = 'web-reader-pro-v6';
 const SHELL = [
   './',
   './index.html',

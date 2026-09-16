@@ -2521,6 +2521,95 @@
   // ==========================================================================
   let currentActiveView = 'home';
 
+  
+  function renderLibraryView(filter = 'all') {
+    const grid = $('libraryNovelGrid');
+    if (!grid || !window.VOLUMES) return;
+
+    grid.innerHTML = '';
+    const vols = Object.values(window.VOLUMES);
+
+    vols.forEach(vol => {
+      const stats = getBookStats(vol);
+      const isCurrent = vol.id === state.volumeId;
+      
+      let completedChaps = 0;
+      let totalChaps = vol.chapters ? vol.chapters.length : 1;
+      
+      if (isCurrent) {
+        completedChaps = Object.keys(state.progressMap).length;
+      } else {
+        try {
+          const saved = JSON.parse(localStorage.getItem(STORAGE_PROGRESS) || '{}');
+          if (saved.lastVolume === vol.id && saved.chapters) {
+            completedChaps = Object.keys(saved.chapters).length;
+          }
+        } catch {}
+      }
+      
+      const pct = Math.min(100, Math.round((completedChaps / totalChaps) * 100));
+      const isComplete = pct >= 90;
+      const isReading = pct > 0 && !isComplete;
+
+      if (filter === 'reading' && !isReading && !isCurrent) return;
+      if (filter === 'complete' && !isComplete) return;
+
+      const card = document.createElement('article');
+      card.className = `library-card ${isCurrent ? 'active-vol' : ''}`;
+      card.innerHTML = `
+        <div class="lib-card-cover-wrap">
+          <img src="${vol.cover || (vol.id === 'vol10' ? 'assets/vol10/image_p002_1.jpeg' : 'assets/image1.jpg')}" alt="Bìa ${vol.title}" class="lib-card-cover" loading="lazy">
+          <span class="lib-card-badge ${vol.id === 'vol10' ? 'badge-new' : 'badge-done'}">
+            ${vol.id === 'vol10' ? 'MỚI NHẤT' : 'HOÀN THÀNH'}
+          </span>
+          <div class="lib-card-progress-bar">
+            <div class="lib-progress-fill" style="width: ${pct}%"></div>
+          </div>
+        </div>
+        <div class="lib-card-content">
+          <div class="lib-card-header">
+            <span class="lib-vol-id">${vol.id.toUpperCase()}</span>
+            <span class="lib-vol-progress-text">${pct > 0 ? `${pct}% đã đọc` : 'Chưa đọc'}</span>
+          </div>
+          <h3 class="lib-card-title">${vol.title}</h3>
+          <p class="lib-card-meta">Tác giả: Saeki-san · Họa sĩ: Hanekoto</p>
+          <div class="lib-card-specs">
+            <span>📖 ${stats.text}</span>
+            <span>🎙️ Microsoft Edge Neural AI</span>
+          </div>
+          <div class="lib-card-actions">
+            <button class="btn btn-primary btn-sm lib-read-btn" data-volume="${vol.id}">
+              ${isCurrent ? 'Tiếp tục đọc' : 'Đọc tập này'}
+            </button>
+            <a href="chapters/${vol.id}/${vol.id === 'vol10' ? 'Vol10_VI_corrected.docx' : 'Vol9_VI_corrected.docx'}" download class="btn btn-secondary btn-sm lib-dl-btn" title="Tải file DOCX">
+              📥 DOCX
+            </a>
+          </div>
+        </div>
+      `;
+
+      card.querySelector('.lib-read-btn')?.addEventListener('click', () => {
+        if (vol.id !== state.volumeId) {
+          switchVolume(vol.id);
+        }
+        switchView('reader');
+      });
+
+      grid.appendChild(card);
+    });
+  }
+
+  function initLibraryFilterEvents() {
+    $$('.filter-chip').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        $$('.filter-chip').forEach(c => c.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+        const filter = e.currentTarget.dataset.filter || 'all';
+        renderLibraryView(filter);
+      });
+    });
+  }
+
   function switchView(viewName) {
     if (!viewName) return;
     currentActiveView = viewName;
@@ -2573,6 +2662,8 @@
       }
     } else if (viewName === 'home') {
       updateHomeHeroCard();
+    } else if (viewName === 'library') {
+      renderLibraryView();
     }
   }
 

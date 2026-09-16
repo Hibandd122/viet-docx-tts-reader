@@ -4819,3 +4819,48 @@ img {
     padding: 16px 16px calc(var(--player-height, 96px) + 58px + 44px + env(safe-area-inset-bottom, 0px)) 16px !important;
   }
 }
+
+
+/* ==========================================================================
+   DESKTOP PINNED HEADER & SLEEK VISIBLE SCROLLBARS (PC FIX)
+   ========================================================================== */
+@media (min-width: 901px) {
+  html, body {
+    height: 100% !important;
+    overflow: hidden !important;
+  }
+  .topbar {
+    position: sticky !important;
+    top: 0 !important;
+    transform: none !important;
+    transition: none !important;
+    z-index: 60 !important;
+  }
+  .topbar.topbar-hidden {
+    transform: none !important;
+  }
+}
+
+/* Custom sleek visible scrollbars for PC */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+  background-clip: content-box;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}

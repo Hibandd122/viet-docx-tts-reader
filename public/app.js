@@ -1959,9 +1959,13 @@
         const topbar = $('topbar');
         if (!topbar) return;
         
-        if (curY > 50 && curY > state.lastScrollY + 12) {
-          topbar.classList.add('topbar-hidden');
-        } else if (curY < state.lastScrollY - 8 || curY <= 25) {
+        if (window.innerWidth <= 900) {
+          if (curY > 50 && curY > state.lastScrollY + 12) {
+            topbar.classList.add('topbar-hidden');
+          } else if (curY < state.lastScrollY - 8 || curY <= 25) {
+            topbar.classList.remove('topbar-hidden');
+          }
+        } else {
           topbar.classList.remove('topbar-hidden');
         }
         state.lastScrollY = curY;

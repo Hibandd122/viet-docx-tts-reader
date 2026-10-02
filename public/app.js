@@ -1947,6 +1947,14 @@
   // 19. EVENT LISTENERS
   // ==========================================================================
   function initEventListeners() {
+    // Back to top button
+    const backToTop = $('backToTopBtn');
+    if (backToTop) {
+      backToTop.addEventListener('click', () => {
+        $('readerArea')?.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
+
     $('sidebarToggleBtn')?.addEventListener('click', toggleSidebar);
     $('sidebarCloseBtn')?.addEventListener('click', closeSidebar);
     $('sidebarBackdrop')?.addEventListener('click', closeSidebar);
@@ -1969,6 +1977,11 @@
           topbar.classList.remove('topbar-hidden');
         }
         state.lastScrollY = curY;
+        const btt = $('backToTopBtn');
+        if (btt) {
+          if (curY > 280) btt.removeAttribute('hidden');
+          else btt.setAttribute('hidden', '');
+        }
       }, { passive: true });
     }
     
@@ -2431,6 +2444,52 @@
       const tag = document.activeElement?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || document.activeElement?.isContentEditable) {
         if (e.key === 'Escape') document.activeElement.blur();
+        return;
+      }
+
+      // Shortcuts: Ctrl+K or / for quick search / jump
+      if ((e.ctrlKey && (e.key === 'k' || e.key === 'K')) || e.key === '/') {
+        e.preventDefault();
+        openQuickJumpModal();
+        return;
+      }
+      // Speed adjustments: [ (slower) and ] (faster)
+      if (e.key === '[') {
+        e.preventDefault();
+        setRate(Math.max(0.5, Math.round((state.rate - 0.1) * 10) / 10));
+        return;
+      }
+      if (e.key === ']') {
+        e.preventDefault();
+        setRate(Math.min(3.0, Math.round((state.rate + 0.1) * 10) / 10));
+        return;
+      }
+      // Direct speed presets: 1 -> 1.0x, 2 -> 1.25x, 3 -> 1.5x, 4 -> 2.0x
+      if (e.key === '1') { e.preventDefault(); setRate(1.0); return; }
+      if (e.key === '2') { e.preventDefault(); setRate(1.25); return; }
+      if (e.key === '3') { e.preventDefault(); setRate(1.5); return; }
+      if (e.key === '4') { e.preventDefault(); setRate(2.0); return; }
+      // J / K for segment navigation
+      if (e.key === 'j' || e.key === 'J') {
+        e.preventDefault();
+        playParagraph(state.paragraphIndex + 1);
+        return;
+      }
+      if (e.key === 'k' || e.key === 'K') {
+        e.preventDefault();
+        playParagraph(Math.max(0, state.paragraphIndex - 1));
+        return;
+      }
+      // Home / End scroll
+      if (e.key === 'Home') {
+        e.preventDefault();
+        $('readerArea')?.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      if (e.key === 'End') {
+        e.preventDefault();
+        const area = $('readerArea');
+        if (area) area.scrollTo({ top: area.scrollHeight, behavior: 'smooth' });
         return;
       }
 
@@ -3016,6 +3075,30 @@
     loadChapter(state.chapterIndex, false);
     
     await loadVoices();
+    
+    // Mobile Touch Swipe Gesture for Chapter Switching
+    let touchStartX = 0;
+    let touchStartY = 0;
+    readerArea?.addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+      touchStartY = e.changedTouches[0].screenY;
+    }, { passive: true });
+
+    readerArea?.addEventListener('touchend', (e) => {
+      const diffX = e.changedTouches[0].screenX - touchStartX;
+      const diffY = e.changedTouches[0].screenY - touchStartY;
+      // Require significant horizontal movement with minimal vertical tilt
+      if (Math.abs(diffX) > 90 && Math.abs(diffY) < 50) {
+        if (diffX < 0) {
+          // Swipe Left -> Next chapter
+          loadChapter(state.chapterIndex + 1, true);
+        } else {
+          // Swipe Right -> Prev chapter
+          loadChapter(state.chapterIndex - 1, true);
+        }
+      }
+    }, { passive: true });
+
     initViewRouterEvents();
     initExpandedPlayerEvents();
     checkSmartResumePrompt();

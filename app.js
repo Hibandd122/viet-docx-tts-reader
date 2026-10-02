@@ -2447,52 +2447,6 @@
         return;
       }
 
-      // Shortcuts: Ctrl+K or / for quick search / jump
-      if ((e.ctrlKey && (e.key === 'k' || e.key === 'K')) || e.key === '/') {
-        e.preventDefault();
-        openQuickJumpModal();
-        return;
-      }
-      // Speed adjustments: [ (slower) and ] (faster)
-      if (e.key === '[') {
-        e.preventDefault();
-        setRate(Math.max(0.5, Math.round((state.rate - 0.1) * 10) / 10));
-        return;
-      }
-      if (e.key === ']') {
-        e.preventDefault();
-        setRate(Math.min(3.0, Math.round((state.rate + 0.1) * 10) / 10));
-        return;
-      }
-      // Direct speed presets: 1 -> 1.0x, 2 -> 1.25x, 3 -> 1.5x, 4 -> 2.0x
-      if (e.key === '1') { e.preventDefault(); setRate(1.0); return; }
-      if (e.key === '2') { e.preventDefault(); setRate(1.25); return; }
-      if (e.key === '3') { e.preventDefault(); setRate(1.5); return; }
-      if (e.key === '4') { e.preventDefault(); setRate(2.0); return; }
-      // J / K for segment navigation
-      if (e.key === 'j' || e.key === 'J') {
-        e.preventDefault();
-        playParagraph(state.paragraphIndex + 1);
-        return;
-      }
-      if (e.key === 'k' || e.key === 'K') {
-        e.preventDefault();
-        playParagraph(Math.max(0, state.paragraphIndex - 1));
-        return;
-      }
-      // Home / End scroll
-      if (e.key === 'Home') {
-        e.preventDefault();
-        $('readerArea')?.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
-      }
-      if (e.key === 'End') {
-        e.preventDefault();
-        const area = $('readerArea');
-        if (area) area.scrollTo({ top: area.scrollHeight, behavior: 'smooth' });
-        return;
-      }
-
       if (e.code === 'Space') {
         e.preventDefault();
         togglePlayPause();

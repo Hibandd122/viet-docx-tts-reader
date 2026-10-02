@@ -744,11 +744,24 @@ a {
   border-color: rgba(129, 140, 248, 0.3);
 }
 .chapter-item-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
   font-size: 11.5px;
   color: var(--text-muted);
+}
+.chapter-pct-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface-hover);
+  color: var(--text-secondary);
+}
+.chapter-item-btn.active .chapter-pct-badge {
+  background: var(--accent-primary);
+  color: #fff;
 }
 .chapter-item-btn.active .chapter-item-header {
   color: var(--accent-primary);

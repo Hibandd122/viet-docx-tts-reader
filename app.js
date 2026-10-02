@@ -1371,8 +1371,8 @@
       
       btn.innerHTML = `
         <div class="chapter-item-header">
-          <span>Phần ${(idx + 1).toString().padStart(2, '0')}</span>
-          <span>${pct}%</span>
+          <span class="chapter-part-label">Phần ${(idx + 1).toString().padStart(2, '0')}</span>
+          <span class="chapter-pct-badge">${pct}%</span>
         </div>
         <div class="chapter-item-title">${ch.title}</div>
         <div class="chapter-mini-progress">
